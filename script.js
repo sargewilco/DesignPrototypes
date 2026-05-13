@@ -1,0 +1,199 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const paletteItems = document.querySelectorAll('.palette-item');
+    const canvas = document.getElementById('canvas');
+    const canvasContainer = document.getElementById('canvas-container');
+    const svgLayer = document.getElementById('connection-layer');
+
+    let draggedType = null;
+    let draggedNode = null;
+    let isDraggingNode = false;
+    let nodeOffset = { x: 0, y: 0 };
+
+    let nodes = {}; // Map of id -> { element, x, y, width, height }
+    let connections = []; // Array of { sourceId, targetId, svgLine }
+    let selectedNodeId = null;
+
+    // --- Drag from Palette ---
+    paletteItems.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            draggedType = e.target.dataset.type;
+            e.dataTransfer.setData('text/plain', draggedType);
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+    });
+
+    canvasContainer.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    canvasContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('text/plain');
+        if (type) {
+            const rect = canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            createNode(type, x, y);
+        }
+        draggedType = null;
+    });
+
+    // --- Node Creation & Management ---
+    let nodeIdCounter = 0;
+    function createNode(type, x, y) {
+        const id = 'node_' + nodeIdCounter++;
+        const el = document.createElement('div');
+        el.className = 'node';
+        el.id = id;
+        el.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+
+        // Initial arbitrary offset so mouse is roughly centered on drop
+        el.style.left = (x - 40) + 'px';
+        el.style.top = (y - 25) + 'px';
+
+        canvas.appendChild(el);
+
+        nodes[id] = {
+            id: id,
+            element: el,
+            type: type
+        };
+
+        // Node Interaction Events
+        el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, id));
+
+        updateNodePosition(id);
+    }
+
+    function updateNodePosition(id) {
+        const node = nodes[id];
+        const rect = node.element.getBoundingClientRect();
+        const containerRect = canvasContainer.getBoundingClientRect();
+
+        node.x = rect.left - containerRect.left;
+        node.y = rect.top - containerRect.top;
+        node.width = rect.width;
+        node.height = rect.height;
+        node.centerX = node.x + node.width / 2;
+        node.centerY = node.y + node.height / 2;
+
+        updateConnections();
+    }
+
+    // --- Dragging Existing Nodes & Selection ---
+    function handleNodeMouseDown(e, id) {
+        e.stopPropagation(); // Prevent canvas background click
+
+        // Handle Selection for connections
+        if (e.shiftKey) {
+            // Shift-click to connect
+            if (selectedNodeId && selectedNodeId !== id) {
+                createConnection(selectedNodeId, id);
+                deselectNode();
+            } else {
+                selectNode(id);
+            }
+            return;
+        }
+
+        // Handle normal drag
+        selectNode(id);
+        isDraggingNode = true;
+        draggedNode = id;
+
+        const rect = nodes[id].element.getBoundingClientRect();
+        nodeOffset.x = e.clientX - rect.left;
+        nodeOffset.y = e.clientY - rect.top;
+
+        document.addEventListener('mousemove', handleNodeMouseMove);
+        document.addEventListener('mouseup', handleNodeMouseUp);
+    }
+
+    function handleNodeMouseMove(e) {
+        if (!isDraggingNode || !draggedNode) return;
+
+        const containerRect = canvasContainer.getBoundingClientRect();
+
+        // Calculate new position
+        let newX = e.clientX - containerRect.left - nodeOffset.x;
+        let newY = e.clientY - containerRect.top - nodeOffset.y;
+
+        // Apply
+        const el = nodes[draggedNode].element;
+        el.style.left = newX + 'px';
+        el.style.top = newY + 'px';
+
+        updateNodePosition(draggedNode);
+    }
+
+    function handleNodeMouseUp(e) {
+        isDraggingNode = false;
+        draggedNode = null;
+        document.removeEventListener('mousemove', handleNodeMouseMove);
+        document.removeEventListener('mouseup', handleNodeMouseUp);
+    }
+
+    function selectNode(id) {
+        deselectNode();
+        selectedNodeId = id;
+        nodes[id].element.classList.add('selected');
+    }
+
+    function deselectNode() {
+        if (selectedNodeId && nodes[selectedNodeId]) {
+            nodes[selectedNodeId].element.classList.remove('selected');
+        }
+        selectedNodeId = null;
+    }
+
+    canvasContainer.addEventListener('mousedown', (e) => {
+        if (e.target === canvasContainer || e.target === canvas || e.target === svgLayer) {
+            deselectNode();
+        }
+    });
+
+    // --- Connections ---
+    function createConnection(sourceId, targetId) {
+        // Prevent duplicate connections
+        if (connections.some(c => (c.sourceId === sourceId && c.targetId === targetId) || (c.sourceId === targetId && c.targetId === sourceId))) {
+            return;
+        }
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.classList.add('connection', 'animated');
+        svgLayer.appendChild(line);
+
+        connections.push({
+            sourceId: sourceId,
+            targetId: targetId,
+            svgLine: line
+        });
+
+        updateConnections();
+    }
+
+    function updateConnections() {
+        connections.forEach(conn => {
+            const source = nodes[conn.sourceId];
+            const target = nodes[conn.targetId];
+
+            if (source && target) {
+                conn.svgLine.setAttribute('x1', source.centerX);
+                conn.svgLine.setAttribute('y1', source.centerY);
+                conn.svgLine.setAttribute('x2', target.centerX);
+                conn.svgLine.setAttribute('y2', target.centerY);
+            }
+        });
+    }
+
+    // Instruction overlay
+    const instructions = document.createElement('div');
+    instructions.style.position = 'absolute';
+    instructions.style.bottom = '10px';
+    instructions.style.left = '10px';
+    instructions.style.color = '#888';
+    instructions.style.pointerEvents = 'none';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.';
+    canvasContainer.appendChild(instructions);
+});

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Diagram Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="palette">
+            <h2>Elements</h2>
+            <div class="palette-item" draggable="true" data-type="router">Router</div>
+            <div class="palette-item" draggable="true" data-type="switch">Switch</div>
+            <div class="palette-item" draggable="true" data-type="server">Server</div>
+            <div class="palette-item" draggable="true" data-type="client">Client</div>
+        </div>
+        <div id="canvas-container">
+            <svg id="connection-layer"></svg>
+            <div id="canvas"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
