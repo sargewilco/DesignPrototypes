@@ -87,10 +87,21 @@ body, html {
     cursor: grabbing;
 }
 
+.connection-group {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.connection-group:hover .connection {
+    stroke: #007bff;
+    stroke-width: 5;
+}
+
 .connection {
     stroke: #555;
     stroke-width: 3;
     stroke-linecap: round;
+    transition: stroke 0.2s, stroke-width 0.2s;
 }
 
 .connection.animated {
@@ -98,8 +109,19 @@ body, html {
     animation: dash 1s linear infinite;
 }
 
+.connection.animated-reverse {
+    stroke-dasharray: 10;
+    animation: dash-reverse 1s linear infinite;
+}
+
 @keyframes dash {
     to {
         stroke-dashoffset: -20;
+    }
+}
+
+@keyframes dash-reverse {
+    to {
+        stroke-dashoffset: 20;
     }
 }

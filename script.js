@@ -160,15 +160,58 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.classList.add('connection', 'animated');
-        svgLayer.appendChild(line);
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.classList.add('connection-group');
 
-        connections.push({
+        const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line1.classList.add('connection', 'animated');
+
+        const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line2.classList.add('connection', 'animated-reverse');
+        line2.style.display = 'none';
+
+        group.appendChild(line1);
+        group.appendChild(line2);
+        svgLayer.appendChild(group);
+
+        const connectionObj = {
+            id: 'conn_' + sourceId + '_' + targetId,
             sourceId: sourceId,
             targetId: targetId,
-            svgLine: line
+            svgGroup: group,
+            line1: line1,
+            line2: line2,
+            flow: 'forward' // 'forward', 'reverse', 'bidirectional'
+        };
+
+        group.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (connectionObj.flow === 'forward') {
+                connectionObj.flow = 'reverse';
+                connectionObj.line1.classList.remove('animated');
+                connectionObj.line1.classList.add('animated-reverse');
+            } else if (connectionObj.flow === 'reverse') {
+                connectionObj.flow = 'bidirectional';
+                connectionObj.line1.classList.remove('animated-reverse');
+                connectionObj.line1.classList.add('animated');
+                connectionObj.line2.style.display = '';
+            } else {
+                connectionObj.flow = 'forward';
+                connectionObj.line1.classList.remove('animated-reverse');
+                connectionObj.line1.classList.add('animated');
+                connectionObj.line2.style.display = 'none';
+            }
+            updateConnections();
         });
+
+        group.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            svgLayer.removeChild(group);
+            connections = connections.filter(c => c.id !== connectionObj.id);
+        });
+
+        connections.push(connectionObj);
 
         updateConnections();
     }
@@ -179,10 +222,34 @@ document.addEventListener('DOMContentLoaded', () => {
             const target = nodes[conn.targetId];
 
             if (source && target) {
-                conn.svgLine.setAttribute('x1', source.centerX);
-                conn.svgLine.setAttribute('y1', source.centerY);
-                conn.svgLine.setAttribute('x2', target.centerX);
-                conn.svgLine.setAttribute('y2', target.centerY);
+                if (conn.flow === 'bidirectional') {
+                    // Calculate offsets for parallel lines
+                    const dx = target.centerX - source.centerX;
+                    const dy = target.centerY - source.centerY;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+
+                    if (len === 0) return;
+
+                    const nx = -dy / len;
+                    const ny = dx / len;
+
+                    const offset = 5;
+
+                    conn.line1.setAttribute('x1', source.centerX + nx * offset);
+                    conn.line1.setAttribute('y1', source.centerY + ny * offset);
+                    conn.line1.setAttribute('x2', target.centerX + nx * offset);
+                    conn.line1.setAttribute('y2', target.centerY + ny * offset);
+
+                    conn.line2.setAttribute('x1', source.centerX - nx * offset);
+                    conn.line2.setAttribute('y1', source.centerY - ny * offset);
+                    conn.line2.setAttribute('x2', target.centerX - nx * offset);
+                    conn.line2.setAttribute('y2', target.centerY - ny * offset);
+                } else {
+                    conn.line1.setAttribute('x1', source.centerX);
+                    conn.line1.setAttribute('y1', source.centerY);
+                    conn.line1.setAttribute('x2', target.centerX);
+                    conn.line1.setAttribute('y2', target.centerY);
+                }
             }
         });
     }
@@ -194,6 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
     instructions.style.left = '10px';
     instructions.style.color = '#888';
     instructions.style.pointerEvents = 'none';
-    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.';
     canvasContainer.appendChild(instructions);
 });
