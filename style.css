@@ -78,12 +78,19 @@ body, html {
     z-index: 2; /* Above SVG lines */
 }
 
+.node[contenteditable="true"] {
+    cursor: text;
+    user-select: text;
+    outline: 2px dashed #007bff;
+    outline-offset: 2px;
+}
+
 .node.selected {
     border-color: #007bff;
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
 }
 
-.node:active {
+.node:active:not([contenteditable="true"]) {
     cursor: grabbing;
 }
 

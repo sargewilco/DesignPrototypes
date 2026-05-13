@@ -63,6 +63,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Node Interaction Events
         el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, id));
 
+        // Renaming functionality
+        el.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            el.contentEditable = true;
+            el.focus();
+            document.execCommand('selectAll', false, null); // Select text for easy replacement
+        });
+
+        const finishEditing = () => {
+            if (el.contentEditable === 'true') {
+                el.contentEditable = false;
+                // Text change might change size, so update lines
+                updateNodePosition(id);
+            }
+        };
+
+        el.addEventListener('blur', finishEditing);
+        el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent newline
+                finishEditing();
+            }
+        });
+
         updateNodePosition(id);
     }
 
@@ -83,6 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Dragging Existing Nodes & Selection ---
     function handleNodeMouseDown(e, id) {
+        if (e.target.isContentEditable) return; // Allow normal text interaction
+
         e.stopPropagation(); // Prevent canvas background click
 
         // Handle Selection for connections
@@ -261,6 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
     instructions.style.left = '10px';
     instructions.style.color = '#888';
     instructions.style.pointerEvents = 'none';
-    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.';
     canvasContainer.appendChild(instructions);
 });
