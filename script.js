@@ -18,7 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dynamic Palette ---
     const elementSets = {
         'standard': ['Router', 'Switch', 'Server', 'Client'],
-        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS']
+        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS'],
+        '5gsa': ['UE', 'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF']
     };
 
     function renderPalette(setKey) {
