@@ -1,9 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const paletteItems = document.querySelectorAll('.palette-item');
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
     const svgLayer = document.getElementById('connection-layer');
     const colorPicker = document.getElementById('node-color');
+    const networkTypeSelector = document.getElementById('network-type-selector');
+    const paletteElementsContainer = document.getElementById('palette-elements');
 
     let draggedType = null;
     let draggedNode = null;
@@ -14,13 +15,40 @@ document.addEventListener('DOMContentLoaded', () => {
     let connections = []; // Array of { sourceId, targetId, svgLine }
     let selectedNodeId = null;
 
+    // --- Dynamic Palette ---
+    const elementSets = {
+        'standard': ['Router', 'Switch', 'Server', 'Client'],
+        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS']
+    };
+
+    function renderPalette(setKey) {
+        paletteElementsContainer.innerHTML = '';
+        const items = elementSets[setKey] || [];
+        items.forEach(type => {
+            const el = document.createElement('div');
+            el.className = 'palette-item';
+            el.draggable = true;
+            el.dataset.type = type;
+            el.textContent = type;
+            paletteElementsContainer.appendChild(el);
+        });
+    }
+
+    // Initialize palette
+    renderPalette(networkTypeSelector.value);
+
+    networkTypeSelector.addEventListener('change', (e) => {
+        renderPalette(e.target.value);
+    });
+
     // --- Drag from Palette ---
-    paletteItems.forEach(item => {
-        item.addEventListener('dragstart', (e) => {
+    // Use event delegation for dynamically added items
+    paletteElementsContainer.addEventListener('dragstart', (e) => {
+        if (e.target.classList.contains('palette-item')) {
             draggedType = e.target.dataset.type;
             e.dataTransfer.setData('text/plain', draggedType);
             e.dataTransfer.effectAllowed = 'copy';
-        });
+        }
     });
 
     canvasContainer.addEventListener('dragover', (e) => {
@@ -47,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.createElement('div');
         el.className = 'node';
         el.id = id;
-        el.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        el.textContent = type; // Use exactly what was passed
 
         // Initial arbitrary offset so mouse is roughly centered on drop
         el.style.left = (x - 40) + 'px';

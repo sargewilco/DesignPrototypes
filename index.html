@@ -10,10 +10,13 @@
     <div id="app">
         <div id="palette">
             <h2>Elements</h2>
-            <div class="palette-item" draggable="true" data-type="router">Router</div>
-            <div class="palette-item" draggable="true" data-type="switch">Switch</div>
-            <div class="palette-item" draggable="true" data-type="server">Server</div>
-            <div class="palette-item" draggable="true" data-type="client">Client</div>
+            <select id="network-type-selector" style="width: 100%; margin-bottom: 15px; padding: 5px;">
+                <option value="standard">Standard</option>
+                <option value="3gpp">3GPP Mobile</option>
+            </select>
+            <div id="palette-elements">
+                <!-- Dynamically populated -->
+            </div>
 
             <hr style="width: 100%; border: 1px solid #ccc; margin: 15px 0;">
 
