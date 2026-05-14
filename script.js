@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
     const svgLayer = document.getElementById('connection-layer');
+    const colorPicker = document.getElementById('node-color');
 
     let draggedType = null;
     let draggedNode = null;
@@ -160,10 +161,32 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('mouseup', handleNodeMouseUp);
     }
 
+    // --- Node Properties ---
+    colorPicker.addEventListener('input', (e) => {
+        if (selectedNodeId && nodes[selectedNodeId]) {
+            nodes[selectedNodeId].element.style.backgroundColor = e.target.value;
+        }
+    });
+
+    function rgbToHex(rgb) {
+        if (rgb.startsWith('#')) return rgb;
+        const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+        if (!match) return '#ffffff';
+        const r = parseInt(match[1]);
+        const g = parseInt(match[2]);
+        const b = parseInt(match[3]);
+        return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+    }
+
     function selectNode(id) {
         deselectNode();
         selectedNodeId = id;
         nodes[id].element.classList.add('selected');
+
+        // Update color picker
+        const bgColor = window.getComputedStyle(nodes[id].element).backgroundColor;
+        colorPicker.value = rgbToHex(bgColor);
+        colorPicker.disabled = false;
     }
 
     function deselectNode() {
@@ -171,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nodes[selectedNodeId].element.classList.remove('selected');
         }
         selectedNodeId = null;
+        colorPicker.disabled = true;
     }
 
     canvasContainer.addEventListener('mousedown', (e) => {
