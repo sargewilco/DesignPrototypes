@@ -21,10 +21,16 @@
 
             <hr style="width: 100%; border: 1px solid #ccc; margin: 15px 0;">
 
-            <h2>Properties</h2>
+<h2>Properties</h2>
             <div class="property-group">
-                <label for="node-color">Background Color:</label>
-                <input type="color" id="node-color" value="#ffffff" disabled>
+                <label>Background Color:</label>
+                <div id="color-presets" class="color-presets disabled">
+                    <!-- Dynamically populated -->
+                </div>
+                <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                    <label for="node-color" style="font-size: 0.9em; color: #555;">Custom:</label>
+                    <input type="color" id="node-color" value="#ffffff" disabled>
+                </div>
             </div>
         </div>
         <div id="canvas-container">

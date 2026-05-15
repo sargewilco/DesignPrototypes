@@ -2,9 +2,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     const canvasContainer = document.getElementById('canvas-container');
     const svgLayer = document.getElementById('connection-layer');
-    const colorPicker = document.getElementById('node-color');
+const colorPicker = document.getElementById('node-color');
+    const colorPresetsContainer = document.getElementById('color-presets');
     const networkTypeSelector = document.getElementById('network-type-selector');
     const paletteElementsContainer = document.getElementById('palette-elements');
+
+    const presetColors = [
+        '#ffffff', // White
+        '#f8d7da', // Pastel Red
+        '#d4edda', // Pastel Green
+        '#cce5ff', // Pastel Blue
+        '#fff3cd', // Pastel Yellow
+        '#e2e3e5', // Light Gray
+        '#f5c6cb', // Darker Red
+        '#b8daff', // Darker Blue
+        '#ffeeba', // Darker Yellow
+        '#343a40'  // Dark
+    ];
+
+    function initColorPresets() {
+        presetColors.forEach(color => {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = color;
+            swatch.dataset.color = color;
+
+            swatch.addEventListener('click', () => {
+                if (selectedNodeId && nodes[selectedNodeId]) {
+                    applyColorToSelected(color);
+                    updateActiveSwatch(color);
+                }
+            });
+            colorPresetsContainer.appendChild(swatch);
+        });
+    }
+
+    function updateActiveSwatch(hexColor) {
+        // Normalise hex format to lowercase for comparison
+        const normalized = hexColor.toLowerCase();
+        document.querySelectorAll('.color-swatch').forEach(swatch => {
+            if (swatch.dataset.color.toLowerCase() === normalized) {
+                swatch.classList.add('active');
+            } else {
+                swatch.classList.remove('active');
+            }
+        });
+        colorPicker.value = normalized;
+    }
+
+    function applyColorToSelected(hexColor) {
+        if (selectedNodeId && nodes[selectedNodeId]) {
+            nodes[selectedNodeId].element.style.backgroundColor = hexColor;
+            nodes[selectedNodeId].element.style.color = getContrastYIQ(hexColor);
+        }
+    }
+
+    initColorPresets();
 
     let draggedType = null;
     let draggedNode = null;
@@ -272,12 +325,9 @@ function handleNodeMouseUp(e) {
         return (yiq >= 128) ? 'black' : 'white';
     }
 
-    colorPicker.addEventListener('input', (e) => {
-        if (selectedNodeId && nodes[selectedNodeId]) {
-            const hexColor = e.target.value;
-            nodes[selectedNodeId].element.style.backgroundColor = hexColor;
-            nodes[selectedNodeId].element.style.color = getContrastYIQ(hexColor);
-        }
+colorPicker.addEventListener('input', (e) => {
+        applyColorToSelected(e.target.value);
+        updateActiveSwatch(e.target.value);
     });
 
     function rgbToHex(rgb) {
@@ -290,23 +340,27 @@ function handleNodeMouseUp(e) {
         return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
     }
 
-    function selectNode(id) {
+function selectNode(id) {
         deselectNode();
         selectedNodeId = id;
         nodes[id].element.classList.add('selected');
 
-        // Update color picker
+        // Update color UI
         const bgColor = window.getComputedStyle(nodes[id].element).backgroundColor;
-        colorPicker.value = rgbToHex(bgColor);
+        const hexBg = rgbToHex(bgColor);
         colorPicker.disabled = false;
+        colorPresetsContainer.classList.remove('disabled');
+        updateActiveSwatch(hexBg);
     }
 
-    function deselectNode() {
+function deselectNode() {
         if (selectedNodeId && nodes[selectedNodeId]) {
             nodes[selectedNodeId].element.classList.remove('selected');
         }
         selectedNodeId = null;
         colorPicker.disabled = true;
+        colorPresetsContainer.classList.add('disabled');
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
     }
 
 canvasContainer.addEventListener('mousedown', (e) => {
