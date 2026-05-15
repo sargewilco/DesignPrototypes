@@ -5,7 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
 const colorPicker = document.getElementById('node-color');
     const colorPresetsContainer = document.getElementById('color-presets');
     const networkTypeSelector = document.getElementById('network-type-selector');
-    const paletteElementsContainer = document.getElementById('palette-elements');
+const paletteElementsContainer = document.getElementById('palette-elements');
+    const btnSave = document.getElementById('btn-save');
+    const btnLoad = document.getElementById('btn-load');
+    const loadFile = document.getElementById('load-file');
+    const btnExportSvg = document.getElementById('btn-export-svg');
+    const btnExportPng = document.getElementById('btn-export-png');
+    const btnClear = document.getElementById('btn-clear');
 
     const presetColors = [
         '#ffffff', // White
@@ -420,7 +426,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
     }, { passive: false });
 
     // --- Connections ---
-    function createConnection(sourceId, targetId) {
+function createConnection(sourceId, targetId, initialFlow = 'forward', initialWaypoints = []) {
         // Prevent duplicate connections
         if (connections.some(c => (c.sourceId === sourceId && c.targetId === targetId) || (c.sourceId === targetId && c.targetId === sourceId))) {
             return;
@@ -444,7 +450,7 @@ const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.appendChild(line2);
         svgLayer.appendChild(group);
 
-        const connectionObj = {
+const connectionObj = {
             id: 'conn_' + sourceId + '_' + targetId,
             sourceId: sourceId,
             targetId: targetId,
@@ -452,10 +458,39 @@ const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             hitArea: hitArea,
             line1: line1,
             line2: line2,
-            flow: 'forward', // 'forward', 'reverse', 'bidirectional'
+            flow: initialFlow, // 'forward', 'reverse', 'bidirectional'
             waypoints: []
         };
 
+        // Apply initial flow UI
+        if (initialFlow === 'reverse') {
+            line1.classList.remove('animated');
+            line1.classList.add('animated-reverse');
+        } else if (initialFlow === 'bidirectional') {
+            line2.style.display = '';
+        }
+
+        // Apply initial waypoints
+        initialWaypoints.forEach(wp => {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', wp.x);
+            circle.setAttribute('cy', wp.y);
+            circle.setAttribute('r', 5);
+            circle.classList.add('waypoint');
+            group.appendChild(circle);
+
+            const wpObj = { x: wp.x, y: wp.y, element: circle };
+            connectionObj.waypoints.push(wpObj);
+
+            circle.addEventListener('mousedown', (we) => {
+                we.stopPropagation();
+                isDraggingWaypoint = true;
+                draggedWaypoint = wpObj;
+                draggedConnection = connectionObj;
+                document.addEventListener('mousemove', handleNodeMouseMove);
+                document.addEventListener('mouseup', handleNodeMouseUp);
+            });
+        });
 
         group.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -625,6 +660,277 @@ conn.line1.setAttribute('d', path1D);
             }
         });
     }
+// --- Save and Load JSON ---
+    function clearCanvas() {
+        // Remove all nodes
+        Object.values(nodes).forEach(n => {
+            if (n.element.parentNode) {
+                n.element.parentNode.removeChild(n.element);
+            }
+        });
+        nodes = {};
+
+        // Remove all connections
+        connections.forEach(c => {
+            if (c.svgGroup.parentNode) {
+                c.svgGroup.parentNode.removeChild(c.svgGroup);
+            }
+            c.waypoints.forEach(wp => {
+                if (wp.element && wp.element.parentNode) {
+                    wp.element.parentNode.removeChild(wp.element);
+                }
+            });
+        });
+        connections = [];
+
+        deselectNode();
+        scale = 1;
+        panX = 0;
+        panY = 0;
+        applyTransform();
+    }
+
+    btnClear.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the canvas?')) {
+            clearCanvas();
+        }
+    });
+
+    btnSave.addEventListener('click', () => {
+        const state = {
+            scale: scale,
+            panX: panX,
+            panY: panY,
+            nodes: Object.values(nodes).map(n => ({
+                id: n.id,
+                type: n.type,
+                textContent: n.element.textContent,
+                x: n.x,
+                y: n.y,
+                width: n.width,
+                height: n.height,
+                backgroundColor: window.getComputedStyle(n.element).backgroundColor,
+                color: window.getComputedStyle(n.element).color
+            })),
+            connections: connections.map(c => ({
+                sourceId: c.sourceId,
+                targetId: c.targetId,
+                flow: c.flow,
+                waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
+            }))
+        };
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "diagram.json");
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    });
+
+    btnLoad.addEventListener('click', () => {
+        loadFile.click();
+    });
+
+    loadFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            try {
+                const state = JSON.parse(evt.target.result);
+                clearCanvas();
+
+                scale = state.scale || 1;
+                panX = state.panX || 0;
+                panY = state.panY || 0;
+                applyTransform();
+
+                // Restore nodes
+                if (state.nodes) {
+                    state.nodes.forEach(nData => {
+                        const el = document.createElement('div');
+                        el.className = 'node';
+                        el.textContent = nData.textContent || nData.type;
+
+                        el.style.left = nData.x + 'px';
+                        el.style.top = nData.y + 'px';
+
+                        // Convert rgb string back to hex if needed, or just apply it
+                        el.style.backgroundColor = nData.backgroundColor || 'white';
+                        el.style.color = nData.color || 'black';
+
+                        canvas.appendChild(el);
+
+                        nodes[nData.id] = {
+                            id: nData.id,
+                            element: el,
+                            type: nData.type,
+                            x: nData.x,
+                            y: nData.y,
+                            width: nData.width || 80,
+                            height: nData.height || 54,
+                            centerX: nData.x + (nData.width || 80) / 2,
+                            centerY: nData.y + (nData.height || 54) / 2
+                        };
+
+                        el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, nData.id));
+                        el.addEventListener('dblclick', (e) => {
+                            e.stopPropagation();
+                            el.contentEditable = true;
+                            el.focus();
+                            document.execCommand('selectAll', false, null);
+                        });
+
+                        const finishEditing = () => {
+                            if (el.contentEditable === 'true') {
+                                el.contentEditable = false;
+                                updateNodePosition(nData.id);
+                            }
+                        };
+                        el.addEventListener('blur', finishEditing);
+                        el.addEventListener('keydown', (ke) => {
+                            if (ke.key === 'Enter') {
+                                ke.preventDefault();
+                                finishEditing();
+                            }
+                        });
+
+                        // Force layout calculations after appending
+                        setTimeout(() => { updateNodePosition(nData.id); }, 0);
+                    });
+                }
+
+                // Restore connections
+                if (state.connections) {
+                    // we need to wait for nodes to be properly positioned before drawing lines
+                    setTimeout(() => {
+                        state.connections.forEach(cData => {
+                            createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints);
+                        });
+                    }, 10);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error parsing JSON file');
+            }
+            loadFile.value = ''; // reset
+        };
+        reader.readAsText(file);
+    });
+
+function generateSVGString() {
+        // Calculate Bounding Box
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        const allNodes = Object.values(nodes);
+        if (allNodes.length === 0) return null;
+
+        allNodes.forEach(n => {
+            if (n.x < minX) minX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.x + n.width > maxX) maxX = n.x + n.width;
+            if (n.y + n.height > maxY) maxY = n.y + n.height;
+        });
+
+        connections.forEach(c => {
+            c.waypoints.forEach(wp => {
+                if (wp.x < minX) minX = wp.x;
+                if (wp.y < minY) minY = wp.y;
+                if (wp.x > maxX) maxX = wp.x;
+                if (wp.y > maxY) maxY = wp.y;
+            });
+        });
+
+        // Add padding
+        minX -= 50; minY -= 50; maxX += 50; maxY += 50;
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // Base SVG wrapper
+        let svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">`;
+
+        // Add styles
+        svgStr += `<style>
+            .connection { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
+            .connection.animated { stroke-dasharray: 10; }
+            .connection.animated-reverse { stroke-dasharray: 10; }
+            .connection-hitarea { fill: none; stroke: transparent; stroke-width: 20; }
+            .waypoint { fill: white; stroke: #007bff; stroke-width: 2; }
+            .node-bg { stroke: #333; stroke-width: 2; rx: 8; ry: 8; }
+            .node-text { font-family: sans-serif; font-size: 16px; text-anchor: middle; dominant-baseline: middle; }
+        </style>`;
+
+        // Add connections (raw HTML from the svg layer, removing transform if any)
+        // Actually, just clone the group contents
+        svgStr += `<g id="connections">`;
+        connections.forEach(c => {
+            svgStr += c.svgGroup.outerHTML;
+        });
+        svgStr += `</g>`;
+
+        // Add nodes
+        svgStr += `<g id="nodes">`;
+        allNodes.forEach(n => {
+            const bg = window.getComputedStyle(n.element).backgroundColor;
+            const fg = window.getComputedStyle(n.element).color;
+            svgStr += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
+            svgStr += `<text class="node-text" x="${n.centerX}" y="${n.centerY}" fill="${fg}">${n.element.textContent}</text>`;
+        });
+        svgStr += `</g></svg>`;
+
+        return svgStr;
+    }
+
+    btnExportSvg.addEventListener('click', () => {
+        const svg = generateSVGString();
+        if (!svg) return alert("Canvas is empty");
+        const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "diagram.svg";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    });
+
+    btnExportPng.addEventListener('click', () => {
+        const svg = generateSVGString();
+        if (!svg) return alert("Canvas is empty");
+
+        const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
+        const url = URL.createObjectURL(blob);
+
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+
+            // Draw white background
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.drawImage(img, 0, 0);
+
+            canvas.toBlob(pngBlob => {
+                const pngUrl = URL.createObjectURL(pngBlob);
+                const a = document.createElement("a");
+                a.href = pngUrl;
+                a.download = "diagram.png";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(pngUrl);
+            });
+            URL.revokeObjectURL(url);
+        };
+        img.src = url;
+    });
+
     // Instruction overlay
     const instructions = document.createElement('div');
     instructions.style.position = 'absolute';

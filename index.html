@@ -32,6 +32,18 @@
                     <input type="color" id="node-color" value="#ffffff" disabled>
                 </div>
             </div>
+
+            <hr style="width: 100%; border: 1px solid #ccc; margin: 15px 0;">
+
+            <h2>Actions</h2>
+            <div class="toolbar">
+                <button id="btn-save" class="tool-btn">Save JSON</button>
+                <button id="btn-load" class="tool-btn">Load JSON</button>
+                <input type="file" id="load-file" accept=".json" style="display: none;">
+                <button id="btn-export-svg" class="tool-btn">Export SVG</button>
+                <button id="btn-export-png" class="tool-btn">Export PNG</button>
+                <button id="btn-clear" class="tool-btn btn-danger">Clear Canvas</button>
+            </div>
         </div>
         <div id="canvas-container">
             <svg id="connection-layer"></svg>

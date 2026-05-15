@@ -200,3 +200,41 @@ body, html {
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3);
     transform: scale(1.1);
 }
+
+/* Toolbar Actions */
+.toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tool-btn {
+    padding: 8px 12px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: center;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.tool-btn:hover {
+    background-color: #f0f0f0;
+    border-color: #999;
+}
+
+.tool-btn:active {
+    background-color: #e0e0e0;
+}
+
+.btn-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #f8d7da;
+    border-color: #bd2130;
+    color: #bd2130;
+}
