@@ -44,16 +44,23 @@ body, html {
     position: relative;
     background-color: #fafafa;
     overflow: hidden;
+    cursor: grab;
+    background-image: radial-gradient(#ccc 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: 0 0;
 }
 
+#canvas-container.panning {
+    cursor: grabbing !important;
+}
 #canvas {
     width: 100%;
     height: 100%;
     position: absolute;
     top: 0;
     left: 0;
+    transform-origin: 0 0;
 }
-
 #connection-layer {
     position: absolute;
     top: 0;
@@ -62,8 +69,9 @@ body, html {
     height: 100%;
     pointer-events: none; /* Let clicks pass through to canvas */
     z-index: 1; /* Below nodes */
+    transform-origin: 0 0;
+    overflow: visible;
 }
-
 .node {
     position: absolute;
     background-color: white;

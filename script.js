@@ -11,9 +11,31 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDraggingNode = false;
     let nodeOffset = { x: 0, y: 0 };
 
-    let nodes = {}; // Map of id -> { element, x, y, width, height }
+let nodes = {}; // Map of id -> { element, x, y, width, height }
     let connections = []; // Array of { sourceId, targetId, svgLine }
     let selectedNodeId = null;
+
+    // Waypoint state
+    let isDraggingWaypoint = false;
+    let draggedWaypoint = null;
+    let draggedConnection = null;
+
+    // Pan & Zoom state
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanningCanvas = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    const GRID_SIZE = 20;
+
+    function applyTransform() {
+        const transformStr = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        canvas.style.transform = transformStr;
+        svgLayer.style.transform = transformStr;
+        canvasContainer.style.backgroundPosition = `${panX}px ${panY}px`;
+        canvasContainer.style.backgroundSize = `${GRID_SIZE * scale}px ${GRID_SIZE * scale}px`;
+    }
 
     // --- Dynamic Palette ---
     const elementSets = {
@@ -57,30 +79,28 @@ document.addEventListener('DOMContentLoaded', () => {
         e.dataTransfer.dropEffect = 'copy';
     });
 
-    canvasContainer.addEventListener('drop', (e) => {
+canvasContainer.addEventListener('drop', (e) => {
         e.preventDefault();
         const type = e.dataTransfer.getData('text/plain');
-        if (type) {
-            const rect = canvasContainer.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            createNode(type, x, y);
-        }
-        draggedType = null;
-    });
+        if (!type) return;
 
-    // --- Node Creation & Management ---
-    let nodeIdCounter = 0;
-    function createNode(type, x, y) {
-        const id = 'node_' + nodeIdCounter++;
+        const containerRect = canvasContainer.getBoundingClientRect();
+
+        // Calculate coordinate in canvas space, factoring in pan and zoom
+        let x = (e.clientX - containerRect.left - panX) / scale;
+        let y = (e.clientY - containerRect.top - panY) / scale;
+
+        // Snap to grid
+        x = Math.round((x - 40) / GRID_SIZE) * GRID_SIZE;
+        y = Math.round((y - 25) / GRID_SIZE) * GRID_SIZE;
+
+        const id = 'node_' + Date.now();
         const el = document.createElement('div');
         el.className = 'node';
-        el.id = id;
         el.textContent = type; // Use exactly what was passed
 
-        // Initial arbitrary offset so mouse is roughly centered on drop
-        el.style.left = (x - 40) + 'px';
-        el.style.top = (y - 25) + 'px';
+el.style.left = x + 'px';
+        el.style.top = y + 'px';
 
         canvas.appendChild(el);
 
@@ -118,17 +138,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateNodePosition(id);
-    }
+    });
 
-    function updateNodePosition(id) {
+function updateNodePosition(id) {
         const node = nodes[id];
-        const rect = node.element.getBoundingClientRect();
-        const containerRect = canvasContainer.getBoundingClientRect();
+        // Read directly from style to bypass scale/pan complications, or use unscaled logic
+        node.x = parseFloat(node.element.style.left) || 0;
+        node.y = parseFloat(node.element.style.top) || 0;
 
-        node.x = rect.left - containerRect.left;
-        node.y = rect.top - containerRect.top;
-        node.width = rect.width;
-        node.height = rect.height;
+        // To get width/height, we can divide the bounded rect by scale
+        const rect = node.element.getBoundingClientRect();
+        node.width = rect.width / scale;
+        node.height = rect.height / scale;
+
         node.centerX = node.x + node.width / 2;
         node.centerY = node.y + node.height / 2;
 
@@ -158,20 +180,28 @@ document.addEventListener('DOMContentLoaded', () => {
         isDraggingNode = true;
         draggedNode = id;
 
-        const rect = nodes[id].element.getBoundingClientRect();
-        nodeOffset.x = e.clientX - rect.left;
-        nodeOffset.y = e.clientY - rect.top;
+const rect = nodes[id].element.getBoundingClientRect();
+        // Calculate offset in unscaled coordinates
+        nodeOffset.x = (e.clientX - rect.left) / scale;
+        nodeOffset.y = (e.clientY - rect.top) / scale;
 
         document.addEventListener('mousemove', handleNodeMouseMove);
         document.addEventListener('mouseup', handleNodeMouseUp);
     }
 
 
-    function handleNodeMouseMove(e) {
+function handleNodeMouseMove(e) {
         if (isDraggingWaypoint && draggedWaypoint) {
             const containerRect = canvasContainer.getBoundingClientRect();
-            draggedWaypoint.x = e.clientX - containerRect.left;
-            draggedWaypoint.y = e.clientY - containerRect.top;
+            let wx = (e.clientX - containerRect.left - panX) / scale;
+            let wy = (e.clientY - containerRect.top - panY) / scale;
+
+            // Snap to grid
+            wx = Math.round(wx / GRID_SIZE) * GRID_SIZE;
+            wy = Math.round(wy / GRID_SIZE) * GRID_SIZE;
+
+            draggedWaypoint.x = wx;
+            draggedWaypoint.y = wy;
             draggedWaypoint.element.setAttribute('cx', draggedWaypoint.x);
             draggedWaypoint.element.setAttribute('cy', draggedWaypoint.y);
             updateConnections();
@@ -180,12 +210,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!isDraggingNode || !draggedNode) return;
 
-
         const containerRect = canvasContainer.getBoundingClientRect();
 
         // Calculate new position
-        let newX = e.clientX - containerRect.left - nodeOffset.x;
-        let newY = e.clientY - containerRect.top - nodeOffset.y;
+        let newX = (e.clientX - containerRect.left - panX) / scale - nodeOffset.x;
+        let newY = (e.clientY - containerRect.top - panY) / scale - nodeOffset.y;
+
+        // Snap to grid
+        newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+        newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
         // Apply
         const el = nodes[draggedNode].element;
@@ -276,11 +309,61 @@ function handleNodeMouseUp(e) {
         colorPicker.disabled = true;
     }
 
-    canvasContainer.addEventListener('mousedown', (e) => {
+canvasContainer.addEventListener('mousedown', (e) => {
         if (e.target === canvasContainer || e.target === canvas || e.target === svgLayer) {
             deselectNode();
+
+            // Start panning
+            isPanningCanvas = true;
+            panStartX = e.clientX - panX;
+            panStartY = e.clientY - panY;
+            canvasContainer.classList.add('panning');
         }
     });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isPanningCanvas) {
+            panX = e.clientX - panStartX;
+            panY = e.clientY - panStartY;
+            applyTransform();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isPanningCanvas) {
+            isPanningCanvas = false;
+            canvasContainer.classList.remove('panning');
+        }
+    });
+
+    canvasContainer.addEventListener('wheel', (e) => {
+        if (e.target !== canvasContainer && e.target !== canvas && e.target !== svgLayer && !e.target.closest('.node')) {
+            // allow scrolling properties panel if it has one
+            // but for canvas container we want to zoom
+        }
+
+        // Prevent default scrolling
+        e.preventDefault();
+
+        const zoomSensitivity = 0.001;
+        const delta = e.deltaY * -zoomSensitivity;
+        let newScale = scale + delta;
+
+        // constrain scale
+        newScale = Math.min(Math.max(0.2, newScale), 5);
+
+        // zoom towards mouse position
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const mouseX = e.clientX - containerRect.left;
+        const mouseY = e.clientY - containerRect.top;
+
+        // calculate new pan to keep mouse pointing at the same canvas point
+        panX = mouseX - (mouseX - panX) * (newScale / scale);
+        panY = mouseY - (mouseY - panY) * (newScale / scale);
+
+        scale = newScale;
+        applyTransform();
+    }, { passive: false });
 
     // --- Connections ---
     function createConnection(sourceId, targetId) {
@@ -317,11 +400,15 @@ function handleNodeMouseUp(e) {
 
         group.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (e.altKey) {
+if (e.altKey) {
                 // Add waypoint
                 const containerRect = canvasContainer.getBoundingClientRect();
-                const wx = e.clientX - containerRect.left;
-                const wy = e.clientY - containerRect.top;
+                let wx = (e.clientX - containerRect.left - panX) / scale;
+                let wy = (e.clientY - containerRect.top - panY) / scale;
+
+                // Snap
+                wx = Math.round(wx / GRID_SIZE) * GRID_SIZE;
+                wy = Math.round(wy / GRID_SIZE) * GRID_SIZE;
 
                 const waypoint = { x: wx, y: wy };
 
@@ -478,6 +565,6 @@ group.addEventListener('contextmenu', (e) => {
     instructions.style.left = '10px';
     instructions.style.color = '#888';
     instructions.style.pointerEvents = 'none';
-    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.<br><b>Alt-click</b> a line to add a waypoint, drag to route.';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.<br><b>Alt-click</b> a line to add a waypoint, drag to route.<br>Scroll to zoom. Drag background to pan. Elements snap to grid.';
     canvasContainer.appendChild(instructions);
 });
