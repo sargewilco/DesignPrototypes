@@ -166,8 +166,20 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('mouseup', handleNodeMouseUp);
     }
 
+
     function handleNodeMouseMove(e) {
+        if (isDraggingWaypoint && draggedWaypoint) {
+            const containerRect = canvasContainer.getBoundingClientRect();
+            draggedWaypoint.x = e.clientX - containerRect.left;
+            draggedWaypoint.y = e.clientY - containerRect.top;
+            draggedWaypoint.element.setAttribute('cx', draggedWaypoint.x);
+            draggedWaypoint.element.setAttribute('cy', draggedWaypoint.y);
+            updateConnections();
+            return;
+        }
+
         if (!isDraggingNode || !draggedNode) return;
+
 
         const containerRect = canvasContainer.getBoundingClientRect();
 
@@ -183,8 +195,19 @@ document.addEventListener('DOMContentLoaded', () => {
         updateNodePosition(draggedNode);
     }
 
-    function handleNodeMouseUp(e) {
+
+function handleNodeMouseUp(e) {
+        if (isDraggingWaypoint) {
+            isDraggingWaypoint = false;
+            draggedWaypoint = null;
+            draggedConnection = null;
+            document.removeEventListener('mousemove', handleNodeMouseMove);
+            document.removeEventListener('mouseup', handleNodeMouseUp);
+            return;
+        }
+
         isDraggingNode = false;
+
         draggedNode = null;
         document.removeEventListener('mousemove', handleNodeMouseMove);
         document.removeEventListener('mouseup', handleNodeMouseUp);
@@ -269,10 +292,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.classList.add('connection-group');
 
-        const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         line1.classList.add('connection', 'animated');
 
-        const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         line2.classList.add('connection', 'animated-reverse');
         line2.style.display = 'none';
 
@@ -287,12 +310,48 @@ document.addEventListener('DOMContentLoaded', () => {
             svgGroup: group,
             line1: line1,
             line2: line2,
-            flow: 'forward' // 'forward', 'reverse', 'bidirectional'
+            flow: 'forward', // 'forward', 'reverse', 'bidirectional'
+            waypoints: []
         };
+
 
         group.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (e.altKey) {
+                // Add waypoint
+                const containerRect = canvasContainer.getBoundingClientRect();
+                const wx = e.clientX - containerRect.left;
+                const wy = e.clientY - containerRect.top;
+
+                const waypoint = { x: wx, y: wy };
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', wx);
+                circle.setAttribute('cy', wy);
+                circle.setAttribute('r', 5);
+                circle.classList.add('waypoint');
+
+                // insert waypoint into DOM and data
+                group.appendChild(circle);
+
+                const wpObj = { ...waypoint, element: circle };
+                connectionObj.waypoints.push(wpObj);
+
+circle.addEventListener('mousedown', (we) => {
+                    we.stopPropagation();
+                    isDraggingWaypoint = true;
+                    draggedWaypoint = wpObj;
+                    draggedConnection = connectionObj;
+                    document.addEventListener('mousemove', handleNodeMouseMove);
+                    document.addEventListener('mouseup', handleNodeMouseUp);
+                });
+
+                updateConnections();
+                return;
+            }
+
             if (connectionObj.flow === 'forward') {
+
                 connectionObj.flow = 'reverse';
                 connectionObj.line1.classList.remove('animated');
                 connectionObj.line1.classList.add('animated-reverse');
@@ -310,9 +369,15 @@ document.addEventListener('DOMContentLoaded', () => {
             updateConnections();
         });
 
-        group.addEventListener('contextmenu', (e) => {
+group.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            // Remove any waypoint circles from the DOM
+            connectionObj.waypoints.forEach(wp => {
+                if (wp.element.parentNode) {
+                    wp.element.parentNode.removeChild(wp.element);
+                }
+            });
             svgLayer.removeChild(group);
             connections = connections.filter(c => c.id !== connectionObj.id);
         });
@@ -322,44 +387,90 @@ document.addEventListener('DOMContentLoaded', () => {
         updateConnections();
     }
 
+
     function updateConnections() {
         connections.forEach(conn => {
             const source = nodes[conn.sourceId];
             const target = nodes[conn.targetId];
 
             if (source && target) {
-                if (conn.flow === 'bidirectional') {
-                    // Calculate offsets for parallel lines
-                    const dx = target.centerX - source.centerX;
-                    const dy = target.centerY - source.centerY;
+                const points = [
+                    { x: source.centerX, y: source.centerY },
+                    ...conn.waypoints,
+                    { x: target.centerX, y: target.centerY }
+                ];
+
+                function getNormal(p1, p2) {
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
                     const len = Math.sqrt(dx * dx + dy * dy);
+                    if (len === 0) return { nx: 0, ny: 0 };
+                    return { nx: -dy / len, ny: dx / len };
+                }
 
-                    if (len === 0) return;
-
-                    const nx = -dy / len;
-                    const ny = dx / len;
-
+                if (conn.flow === 'bidirectional') {
                     const offset = 5;
+                    let path1D = '';
+                    let path2D = '';
 
-                    conn.line1.setAttribute('x1', source.centerX + nx * offset);
-                    conn.line1.setAttribute('y1', source.centerY + ny * offset);
-                    conn.line1.setAttribute('x2', target.centerX + nx * offset);
-                    conn.line1.setAttribute('y2', target.centerY + ny * offset);
+                    for (let i = 0; i < points.length; i++) {
+                        let nx = 0, ny = 0;
+                        if (i === 0) {
+                            const n = getNormal(points[0], points[1]);
+                            nx = n.nx; ny = n.ny;
+                        } else if (i === points.length - 1) {
+                            const n = getNormal(points[i - 1], points[i]);
+                            nx = n.nx; ny = n.ny;
+                        } else {
+                            const n1 = getNormal(points[i - 1], points[i]);
+                            const n2 = getNormal(points[i], points[i + 1]);
+                            // Average the normals to miter the corner
+                            const avgX = n1.nx + n2.nx;
+                            const avgY = n1.ny + n2.ny;
+                            const len = Math.sqrt(avgX * avgX + avgY * avgY);
+                            if (len !== 0) {
+                                nx = avgX / len;
+                                ny = avgY / len;
 
-                    conn.line2.setAttribute('x1', source.centerX - nx * offset);
-                    conn.line2.setAttribute('y1', source.centerY - ny * offset);
-                    conn.line2.setAttribute('x2', target.centerX - nx * offset);
-                    conn.line2.setAttribute('y2', target.centerY - ny * offset);
+                                // adjust offset by miter ratio if angle is sharp
+                                // miter = offset / dot(n1, avg_n)
+                                const dot = n1.nx * nx + n1.ny * ny;
+                                if (dot > 0.1) { // avoid infinity if angle is near 180 degrees
+                                    nx = nx / dot;
+                                    ny = ny / dot;
+                                }
+                            } else {
+                                nx = n1.nx; ny = n1.ny;
+                            }
+                        }
+
+                        const p1x = points[i].x + nx * offset;
+                        const p1y = points[i].y + ny * offset;
+                        const p2x = points[i].x - nx * offset;
+                        const p2y = points[i].y - ny * offset;
+
+                        if (i === 0) {
+                            path1D += `M ${p1x} ${p1y} `;
+                            path2D += `M ${p2x} ${p2y} `;
+                        } else {
+                            path1D += `L ${p1x} ${p1y} `;
+                            path2D += `L ${p2x} ${p2y} `;
+                        }
+                    }
+
+                    conn.line1.setAttribute('d', path1D);
+                    conn.line2.setAttribute('d', path2D);
                 } else {
-                    conn.line1.setAttribute('x1', source.centerX);
-                    conn.line1.setAttribute('y1', source.centerY);
-                    conn.line1.setAttribute('x2', target.centerX);
-                    conn.line1.setAttribute('y2', target.centerY);
+                    let pathD = '';
+                    points.forEach((p, i) => {
+                        if (i === 0) pathD += `M ${p.x} ${p.y} `;
+                        else pathD += `L ${p.x} ${p.y} `;
+                    });
+                    conn.line1.setAttribute('d', pathD);
                 }
             }
         });
     }
-
     // Instruction overlay
     const instructions = document.createElement('div');
     instructions.style.position = 'absolute';
@@ -367,6 +478,6 @@ document.addEventListener('DOMContentLoaded', () => {
     instructions.style.left = '10px';
     instructions.style.color = '#888';
     instructions.style.pointerEvents = 'none';
-    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.<br><b>Alt-click</b> a line to add a waypoint, drag to route.';
     canvasContainer.appendChild(instructions);
 });
