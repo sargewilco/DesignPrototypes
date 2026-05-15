@@ -372,8 +372,11 @@ canvasContainer.addEventListener('mousedown', (e) => {
             return;
         }
 
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.classList.add('connection-group');
+
+        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hitArea.classList.add('connection-hitarea');
 
         const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         line1.classList.add('connection', 'animated');
@@ -382,6 +385,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
         line2.classList.add('connection', 'animated-reverse');
         line2.style.display = 'none';
 
+        group.appendChild(hitArea);
         group.appendChild(line1);
         group.appendChild(line2);
         svgLayer.appendChild(group);
@@ -391,6 +395,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
             sourceId: sourceId,
             targetId: targetId,
             svgGroup: group,
+            hitArea: hitArea,
             line1: line1,
             line2: line2,
             flow: 'forward', // 'forward', 'reverse', 'bidirectional'
@@ -545,7 +550,7 @@ group.addEventListener('contextmenu', (e) => {
                         }
                     }
 
-                    conn.line1.setAttribute('d', path1D);
+conn.line1.setAttribute('d', path1D);
                     conn.line2.setAttribute('d', path2D);
                 } else {
                     let pathD = '';
@@ -555,6 +560,14 @@ group.addEventListener('contextmenu', (e) => {
                     });
                     conn.line1.setAttribute('d', pathD);
                 }
+
+                // Calculate center path for hitArea
+                let centerPathD = '';
+                points.forEach((p, i) => {
+                    if (i === 0) centerPathD += `M ${p.x} ${p.y} `;
+                    else centerPathD += `L ${p.x} ${p.y} `;
+                });
+                conn.hitArea.setAttribute('d', centerPathD);
             }
         });
     }
