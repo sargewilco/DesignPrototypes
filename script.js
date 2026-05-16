@@ -97,10 +97,10 @@ let nodes = {}; // Map of id -> { element, x, y, width, height }
     }
 
     // --- Dynamic Palette ---
-    const elementSets = {
-        'standard': ['Router', 'Switch', 'Server', 'Client'],
-        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS'],
-        '5gsa': ['UE', 'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF']
+const elementSets = {
+        'standard': ['Router', 'Switch', 'Server', 'Client', 'Subnet'],
+        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS', 'Subnet'],
+        '5gsa': ['UE', 'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF', 'Subnet']
     };
 
     function renderPalette(setKey) {
@@ -153,13 +153,21 @@ canvasContainer.addEventListener('drop', (e) => {
         x = Math.round((x - 40) / GRID_SIZE) * GRID_SIZE;
         y = Math.round((y - 25) / GRID_SIZE) * GRID_SIZE;
 
-        const id = 'node_' + Date.now();
+const id = 'node_' + Date.now();
         const el = document.createElement('div');
         el.className = 'node';
         el.textContent = type; // Use exactly what was passed
 
-el.style.left = x + 'px';
+        el.style.left = x + 'px';
         el.style.top = y + 'px';
+
+        if (type === 'Subnet') {
+            el.classList.add('subnet-node');
+            el.style.width = '200px';
+            el.style.height = '150px';
+            el.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+            el.style.color = '#007bff';
+        }
 
         canvas.appendChild(el);
 
@@ -169,7 +177,14 @@ el.style.left = x + 'px';
             type: type
         };
 
+        if (type === 'Subnet') {
+            // Attach ResizeObserver to keep width/height in sync
+            const ro = new ResizeObserver(() => updateNodePosition(id));
+            ro.observe(el);
+        }
+
         // Node Interaction Events
+
         el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, id));
 
         // Renaming functionality
@@ -244,6 +259,28 @@ const rect = nodes[id].element.getBoundingClientRect();
         nodeOffset.x = (e.clientX - rect.left) / scale;
         nodeOffset.y = (e.clientY - rect.top) / scale;
 
+        // Subnet Drag: Find children
+        let draggedSubnetChildren = [];
+        if (nodes[id].type === 'Subnet') {
+            const sx = nodes[id].x;
+            const sy = nodes[id].y;
+            const sw = nodes[id].width;
+            const sh = nodes[id].height;
+
+            Object.values(nodes).forEach(n => {
+                if (n.id !== id && n.type !== 'Subnet') {
+                    if (n.centerX >= sx && n.centerX <= sx + sw &&
+                        n.centerY >= sy && n.centerY <= sy + sh) {
+                        draggedSubnetChildren.push({
+                            id: n.id,
+                            offsetX: n.x - sx,
+                            offsetY: n.y - sy
+                        });
+                    }
+                }
+            });
+        }
+
         document.addEventListener('mousemove', handleNodeMouseMove);
         document.addEventListener('mouseup', handleNodeMouseUp);
     }
@@ -279,12 +316,19 @@ function handleNodeMouseMove(e) {
         newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
         newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
-        // Apply
+// Apply
         const el = nodes[draggedNode].element;
         el.style.left = newX + 'px';
         el.style.top = newY + 'px';
-
         updateNodePosition(draggedNode);
+
+        // Move children if subnet
+        draggedSubnetChildren.forEach(child => {
+            const childNode = nodes[child.id];
+            childNode.element.style.left = (newX + child.offsetX) + 'px';
+            childNode.element.style.top = (newY + child.offsetY) + 'px';
+            updateNodePosition(child.id);
+        });
     }
 
 
@@ -426,13 +470,13 @@ canvasContainer.addEventListener('mousedown', (e) => {
     }, { passive: false });
 
     // --- Connections ---
-function createConnection(sourceId, targetId, initialFlow = 'forward', initialWaypoints = []) {
+function createConnection(sourceId, targetId, initialFlow = 'forward', initialWaypoints = [], initialLabel = '') {
         // Prevent duplicate connections
         if (connections.some(c => (c.sourceId === sourceId && c.targetId === targetId) || (c.sourceId === targetId && c.targetId === sourceId))) {
             return;
         }
 
-const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.classList.add('connection-group');
 
         const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -445,12 +489,17 @@ const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         line2.classList.add('connection', 'animated-reverse');
         line2.style.display = 'none';
 
+        const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textLabel.classList.add('connection-label');
+        textLabel.textContent = initialLabel;
+
         group.appendChild(hitArea);
         group.appendChild(line1);
         group.appendChild(line2);
+        group.appendChild(textLabel);
         svgLayer.appendChild(group);
 
-const connectionObj = {
+        const connectionObj = {
             id: 'conn_' + sourceId + '_' + targetId,
             sourceId: sourceId,
             targetId: targetId,
@@ -458,7 +507,9 @@ const connectionObj = {
             hitArea: hitArea,
             line1: line1,
             line2: line2,
+            textLabel: textLabel,
             flow: initialFlow, // 'forward', 'reverse', 'bidirectional'
+            label: initialLabel,
             waypoints: []
         };
 
@@ -492,9 +543,55 @@ const connectionObj = {
             });
         });
 
-        group.addEventListener('click', (e) => {
+group.addEventListener('click', (e) => {
             e.stopPropagation();
-if (e.altKey) {
+            if (e.detail === 2) {
+                // Double click logic!
+                // If another editor is open, close it
+                const existingInput = document.querySelector('.inline-editor');
+                if (existingInput) existingInput.blur();
+
+                // Get center point of connection
+                let textX = parseFloat(connectionObj.textLabel.getAttribute('x')) || 0;
+                let textY = parseFloat(connectionObj.textLabel.getAttribute('y')) || 0;
+
+                if (textX === 0 && textY === 0) {
+                    const containerRect = canvasContainer.getBoundingClientRect();
+                    textX = (e.clientX - containerRect.left - panX) / scale || 0;
+                    textY = (e.clientY - containerRect.top - panY) / scale || 0;
+                }
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = connectionObj.label || '';
+                input.className = 'inline-editor';
+
+                input.style.left = textX + 'px';
+                input.style.top = textY + 'px';
+
+                canvasContainer.appendChild(input);
+                input.focus();
+
+                const saveLabel = () => {
+                    connectionObj.label = input.value;
+                    connectionObj.textLabel.textContent = input.value;
+                    if (input.parentNode) {
+                        input.parentNode.removeChild(input);
+                    }
+                    updateConnections();
+                };
+
+                input.addEventListener('blur', saveLabel);
+                input.addEventListener('keydown', (ke) => {
+                    if (ke.key === 'Enter') {
+                        ke.preventDefault();
+                        saveLabel();
+                    }
+                });
+                return; // exit standard click
+            }
+
+            if (e.altKey) {
                 // Add waypoint
                 const containerRect = canvasContainer.getBoundingClientRect();
                 let wx = (e.clientX - containerRect.left - panX) / scale;
@@ -550,7 +647,54 @@ circle.addEventListener('mousedown', (we) => {
             updateConnections();
         });
 
-group.addEventListener('contextmenu', (e) => {
+group.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // If another editor is open, close it
+            const existingInput = document.querySelector('.inline-editor');
+            if (existingInput) existingInput.blur();
+
+            // Get center point of connection
+            let textX = parseFloat(connectionObj.textLabel.getAttribute('x')) || 0;
+            let textY = parseFloat(connectionObj.textLabel.getAttribute('y')) || 0;
+
+            if (textX === 0 && textY === 0) {
+                const containerRect = canvasContainer.getBoundingClientRect();
+                textX = (e.clientX - containerRect.left - panX) / scale || 0;
+                textY = (e.clientY - containerRect.top - panY) / scale || 0;
+            }
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = connectionObj.label || '';
+            input.className = 'inline-editor';
+
+            input.style.left = textX + 'px';
+            input.style.top = textY + 'px';
+
+            canvasContainer.appendChild(input);
+            input.focus();
+
+            const saveLabel = () => {
+                connectionObj.label = input.value;
+                connectionObj.textLabel.textContent = input.value;
+                if (input.parentNode) {
+                    input.parentNode.removeChild(input);
+                }
+                updateConnections();
+            };
+
+            input.addEventListener('blur', saveLabel);
+            input.addEventListener('keydown', (ke) => {
+                if (ke.key === 'Enter') {
+                    ke.preventDefault();
+                    saveLabel();
+                }
+            });
+        });
+
+        group.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
             // Remove any waypoint circles from the DOM
@@ -650,13 +794,42 @@ conn.line1.setAttribute('d', path1D);
                     conn.line1.setAttribute('d', pathD);
                 }
 
-                // Calculate center path for hitArea
+// Calculate center path for hitArea
                 let centerPathD = '';
                 points.forEach((p, i) => {
                     if (i === 0) centerPathD += `M ${p.x} ${p.y} `;
                     else centerPathD += `L ${p.x} ${p.y} `;
                 });
                 conn.hitArea.setAttribute('d', centerPathD);
+
+                // Calculate midpoint for label
+                let totalLength = 0;
+                const segments = [];
+                for (let i = 0; i < points.length - 1; i++) {
+                    const p1 = points[i];
+                    const p2 = points[i+1];
+                    const len = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                    segments.push({ p1, p2, len });
+                    totalLength += len;
+                }
+
+                let targetLen = totalLength / 2;
+                let currentLen = 0;
+                let midX = 0, midY = 0;
+
+                for (const seg of segments) {
+                    if (currentLen + seg.len >= targetLen) {
+                        const ratio = (targetLen - currentLen) / seg.len;
+                        midX = seg.p1.x + (seg.p2.x - seg.p1.x) * ratio;
+                        midY = seg.p1.y + (seg.p2.y - seg.p1.y) * ratio;
+                        break;
+                    }
+                    currentLen += seg.len;
+                }
+
+                conn.textLabel.setAttribute('x', midX);
+                conn.textLabel.setAttribute('y', midY);
+                // Offset slightly so it's above the line if preferred, or centered. We'll do centered with stroke.
             }
         });
     }
@@ -712,10 +885,11 @@ conn.line1.setAttribute('d', path1D);
                 backgroundColor: window.getComputedStyle(n.element).backgroundColor,
                 color: window.getComputedStyle(n.element).color
             })),
-            connections: connections.map(c => ({
+connections: connections.map(c => ({
                 sourceId: c.sourceId,
                 targetId: c.targetId,
                 flow: c.flow,
+                label: c.label,
                 waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
             }))
         };
@@ -755,12 +929,19 @@ conn.line1.setAttribute('d', path1D);
                         el.className = 'node';
                         el.textContent = nData.textContent || nData.type;
 
-                        el.style.left = nData.x + 'px';
+el.style.left = nData.x + 'px';
                         el.style.top = nData.y + 'px';
-
-                        // Convert rgb string back to hex if needed, or just apply it
-                        el.style.backgroundColor = nData.backgroundColor || 'white';
-                        el.style.color = nData.color || 'black';
+                        if (nData.type === 'Subnet') {
+                            el.classList.add('subnet-node');
+                            el.style.width = nData.width + 'px';
+                            el.style.height = nData.height + 'px';
+                            const ro = new ResizeObserver(() => updateNodePosition(nData.id));
+                            ro.observe(el);
+                        } else {
+                            // Convert rgb string back to hex if needed, or just apply it
+                            el.style.backgroundColor = nData.backgroundColor || 'white';
+                            el.style.color = nData.color || 'black';
+                        }
 
                         canvas.appendChild(el);
 
@@ -803,12 +984,12 @@ conn.line1.setAttribute('d', path1D);
                     });
                 }
 
-                // Restore connections
+// Restore connections
                 if (state.connections) {
                     // we need to wait for nodes to be properly positioned before drawing lines
                     setTimeout(() => {
                         state.connections.forEach(cData => {
-                            createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints);
+                            createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
                         });
                     }, 10);
                 }
@@ -821,7 +1002,20 @@ conn.line1.setAttribute('d', path1D);
         reader.readAsText(file);
     });
 
-function generateSVGString() {
+function escapeXml(unsafe) {
+        if (!unsafe) return '';
+        return unsafe.replace(/[<>&'"]/g, function (c) {
+            switch (c) {
+                case '<': return '&lt;';
+                case '>': return '&gt;';
+                case '&': return '&amp;';
+                case '\'': return '&apos;';
+                case '"': return '&quot;';
+            }
+        });
+    }
+
+    function generateSVGString() {
         // Calculate Bounding Box
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         const allNodes = Object.values(nodes);
@@ -851,7 +1045,7 @@ function generateSVGString() {
         // Base SVG wrapper
         let svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">`;
 
-        // Add styles
+// Add styles
         svgStr += `<style>
             .connection { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
             .connection.animated { stroke-dasharray: 10; }
@@ -859,24 +1053,38 @@ function generateSVGString() {
             .connection-hitarea { fill: none; stroke: transparent; stroke-width: 20; }
             .waypoint { fill: white; stroke: #007bff; stroke-width: 2; }
             .node-bg { stroke: #333; stroke-width: 2; rx: 8; ry: 8; }
+            .subnet-bg { stroke: #007bff; stroke-width: 2; stroke-dasharray: 5,5; rx: 0; ry: 0; }
             .node-text { font-family: sans-serif; font-size: 16px; text-anchor: middle; dominant-baseline: middle; }
+            .subnet-text { font-family: sans-serif; font-size: 16px; text-anchor: start; dominant-baseline: hanging; }
+            .connection-label { font-family: sans-serif; font-size: 14px; font-weight: bold; fill: #333; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: white; stroke-width: 4px; stroke-linecap: butt; stroke-linejoin: miter; }
         </style>`;
 
         // Add connections (raw HTML from the svg layer, removing transform if any)
         // Actually, just clone the group contents
-        svgStr += `<g id="connections">`;
+svgStr += `<g id="connections">`;
         connections.forEach(c => {
-            svgStr += c.svgGroup.outerHTML;
+            const groupClone = c.svgGroup.cloneNode(true);
+            const textEl = groupClone.querySelector('.connection-label');
+            if (textEl && textEl.textContent) {
+                textEl.textContent = escapeXml(textEl.textContent);
+            }
+            svgStr += groupClone.outerHTML;
         });
         svgStr += `</g>`;
 
-        // Add nodes
+// Add nodes
         svgStr += `<g id="nodes">`;
         allNodes.forEach(n => {
             const bg = window.getComputedStyle(n.element).backgroundColor;
             const fg = window.getComputedStyle(n.element).color;
-            svgStr += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
-            svgStr += `<text class="node-text" x="${n.centerX}" y="${n.centerY}" fill="${fg}">${n.element.textContent}</text>`;
+if (n.type === 'Subnet') {
+                svgStr += `<rect class="subnet-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
+                // Subnets align text to top left with padding
+                svgStr += `<text class="subnet-text" x="${n.x + 10}" y="${n.y + 10}" fill="${fg}">${escapeXml(n.element.textContent)}</text>`;
+            } else {
+                svgStr += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
+                svgStr += `<text class="node-text" x="${n.centerX}" y="${n.centerY}" fill="${fg}">${escapeXml(n.element.textContent)}</text>`;
+            }
         });
         svgStr += `</g></svg>`;
 
@@ -903,7 +1111,11 @@ function generateSVGString() {
         const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
         const url = URL.createObjectURL(blob);
 
-        const img = new Image();
+const img = new Image();
+        img.onerror = (e) => {
+            console.error("Failed to load SVG into Image for PNG conversion", e);
+            alert("Failed to export PNG. See console.");
+        };
         img.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
