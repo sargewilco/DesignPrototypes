@@ -98,9 +98,9 @@ let nodes = {}; // Map of id -> { element, x, y, width, height }
 
     // --- Dynamic Palette ---
 const elementSets = {
-        'standard': ['Router', 'Switch', 'Server', 'Client', 'Subnet'],
-        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS', 'Subnet'],
-        '5gsa': ['UE', 'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF', 'Subnet']
+        'standard': ['Router', 'Switch', 'Server', 'Client'],
+        '3gpp': ['UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS'],
+        '5gsa': ['UE', 'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF']
     };
 
     function renderPalette(setKey) {
@@ -161,14 +161,6 @@ const id = 'node_' + Date.now();
         el.style.left = x + 'px';
         el.style.top = y + 'px';
 
-        if (type === 'Subnet') {
-            el.classList.add('subnet-node');
-            el.style.width = '200px';
-            el.style.height = '150px';
-            el.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
-            el.style.color = '#007bff';
-        }
-
         canvas.appendChild(el);
 
         nodes[id] = {
@@ -176,12 +168,6 @@ const id = 'node_' + Date.now();
             element: el,
             type: type
         };
-
-        if (type === 'Subnet') {
-            // Attach ResizeObserver to keep width/height in sync
-            const ro = new ResizeObserver(() => updateNodePosition(id));
-            ro.observe(el);
-        }
 
         // Node Interaction Events
 
@@ -259,28 +245,6 @@ const rect = nodes[id].element.getBoundingClientRect();
         nodeOffset.x = (e.clientX - rect.left) / scale;
         nodeOffset.y = (e.clientY - rect.top) / scale;
 
-        // Subnet Drag: Find children
-        let draggedSubnetChildren = [];
-        if (nodes[id].type === 'Subnet') {
-            const sx = nodes[id].x;
-            const sy = nodes[id].y;
-            const sw = nodes[id].width;
-            const sh = nodes[id].height;
-
-            Object.values(nodes).forEach(n => {
-                if (n.id !== id && n.type !== 'Subnet') {
-                    if (n.centerX >= sx && n.centerX <= sx + sw &&
-                        n.centerY >= sy && n.centerY <= sy + sh) {
-                        draggedSubnetChildren.push({
-                            id: n.id,
-                            offsetX: n.x - sx,
-                            offsetY: n.y - sy
-                        });
-                    }
-                }
-            });
-        }
-
         document.addEventListener('mousemove', handleNodeMouseMove);
         document.addEventListener('mouseup', handleNodeMouseUp);
     }
@@ -321,14 +285,6 @@ function handleNodeMouseMove(e) {
         el.style.left = newX + 'px';
         el.style.top = newY + 'px';
         updateNodePosition(draggedNode);
-
-        // Move children if subnet
-        draggedSubnetChildren.forEach(child => {
-            const childNode = nodes[child.id];
-            childNode.element.style.left = (newX + child.offsetX) + 'px';
-            childNode.element.style.top = (newY + child.offsetY) + 'px';
-            updateNodePosition(child.id);
-        });
     }
 
 
@@ -665,15 +621,16 @@ group.addEventListener('dblclick', (e) => {
                 textY = (e.clientY - containerRect.top - panY) / scale || 0;
             }
 
-            const input = document.createElement('input');
+const input = document.createElement('input');
             input.type = 'text';
             input.value = connectionObj.label || '';
             input.className = 'inline-editor';
 
+            // Append to canvas instead of canvasContainer so that textX/textY (which are unscaled coordinates) map perfectly to the scaled canvas element!
             input.style.left = textX + 'px';
             input.style.top = textY + 'px';
 
-            canvasContainer.appendChild(input);
+            canvas.appendChild(input);
             input.focus();
 
             const saveLabel = () => {
@@ -931,17 +888,9 @@ connections: connections.map(c => ({
 
 el.style.left = nData.x + 'px';
                         el.style.top = nData.y + 'px';
-                        if (nData.type === 'Subnet') {
-                            el.classList.add('subnet-node');
-                            el.style.width = nData.width + 'px';
-                            el.style.height = nData.height + 'px';
-                            const ro = new ResizeObserver(() => updateNodePosition(nData.id));
-                            ro.observe(el);
-                        } else {
-                            // Convert rgb string back to hex if needed, or just apply it
-                            el.style.backgroundColor = nData.backgroundColor || 'white';
-                            el.style.color = nData.color || 'black';
-                        }
+                        // Convert rgb string back to hex if needed, or just apply it
+                        el.style.backgroundColor = nData.backgroundColor || 'white';
+                        el.style.color = nData.color || 'black';
 
                         canvas.appendChild(el);
 
@@ -1053,9 +1002,7 @@ function escapeXml(unsafe) {
             .connection-hitarea { fill: none; stroke: transparent; stroke-width: 20; }
             .waypoint { fill: white; stroke: #007bff; stroke-width: 2; }
             .node-bg { stroke: #333; stroke-width: 2; rx: 8; ry: 8; }
-            .subnet-bg { stroke: #007bff; stroke-width: 2; stroke-dasharray: 5,5; rx: 0; ry: 0; }
             .node-text { font-family: sans-serif; font-size: 16px; text-anchor: middle; dominant-baseline: middle; }
-            .subnet-text { font-family: sans-serif; font-size: 16px; text-anchor: start; dominant-baseline: hanging; }
             .connection-label { font-family: sans-serif; font-size: 14px; font-weight: bold; fill: #333; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: white; stroke-width: 4px; stroke-linecap: butt; stroke-linejoin: miter; }
         </style>`;
 
@@ -1077,14 +1024,8 @@ svgStr += `<g id="connections">`;
         allNodes.forEach(n => {
             const bg = window.getComputedStyle(n.element).backgroundColor;
             const fg = window.getComputedStyle(n.element).color;
-if (n.type === 'Subnet') {
-                svgStr += `<rect class="subnet-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
-                // Subnets align text to top left with padding
-                svgStr += `<text class="subnet-text" x="${n.x + 10}" y="${n.y + 10}" fill="${fg}">${escapeXml(n.element.textContent)}</text>`;
-            } else {
-                svgStr += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
-                svgStr += `<text class="node-text" x="${n.centerX}" y="${n.centerY}" fill="${fg}">${escapeXml(n.element.textContent)}</text>`;
-            }
+            svgStr += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${bg}" />`;
+            svgStr += `<text class="node-text" x="${n.centerX}" y="${n.centerY}" fill="${fg}">${escapeXml(n.element.textContent)}</text>`;
         });
         svgStr += `</g></svg>`;
 

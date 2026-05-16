@@ -240,21 +240,6 @@ body, html {
     color: #bd2130;
 }
 
-/* Subnets */
-.subnet-node {
-    background-color: rgba(0, 123, 255, 0.1) !important;
-    border: 2px dashed #007bff !important;
-    color: #007bff !important;
-    z-index: 0 !important;
-    padding: 10px !important;
-    text-align: left !important;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    resize: both;
-    overflow: hidden;
-}
-
 /* Connection Labels */
 .connection-label {
     font-size: 14px;
