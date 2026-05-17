@@ -511,8 +511,15 @@ colorPicker.addEventListener('input', (e) => {
                 deselectAllNodes();
             }
 
-            if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                // Drag to select
+            // Middle click (button 1) or Shift-left-click to pan
+            if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+                e.preventDefault(); // prevent auto-scroll on middle click
+                isPanningCanvas = true;
+                panStartX = e.clientX - panX;
+                panStartY = e.clientY - panY;
+                canvasContainer.classList.add('panning');
+            } else if (e.button === 0) {
+                // Normal left click-and-drag to select
                 isSelecting = true;
                 startSelectionX = e.clientX;
                 startSelectionY = e.clientY;
@@ -523,12 +530,6 @@ colorPicker.addEventListener('input', (e) => {
                 selectionBox.style.pointerEvents = 'none';
                 selectionBox.style.zIndex = '1000';
                 canvasContainer.appendChild(selectionBox);
-            } else {
-                // Start panning
-                isPanningCanvas = true;
-                panStartX = e.clientX - panX;
-                panStartY = e.clientY - panY;
-                canvasContainer.classList.add('panning');
             }
         }
     });
@@ -1296,6 +1297,6 @@ const img = new Image();
     instructions.style.left = '10px';
     instructions.style.color = '#888';
     instructions.style.pointerEvents = 'none';
-    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.<br><b>Alt-click</b> a line to add a waypoint, drag to route.<br>Scroll to zoom. Drag background to pan. Elements snap to grid.';
+    instructions.innerHTML = 'Drag elements from left.<br>Hold <b>Shift</b> and click two nodes to connect them.<br>Click lines to change flow direction.<br>Right-click lines to remove.<br>Double-click a node to rename it.<br><b>Alt-click</b> a line to add a waypoint, drag to route.<br>Scroll to zoom.<br><b>Click and drag</b> background to select multiple nodes.<br><b>Middle-click</b> (or Shift+drag) background to pan.';
     canvasContainer.appendChild(instructions);
 });
