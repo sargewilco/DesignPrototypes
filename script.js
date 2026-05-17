@@ -34,9 +34,10 @@ const paletteElementsContainer = document.getElementById('palette-elements');
             swatch.dataset.color = color;
 
             swatch.addEventListener('click', () => {
-                if (selectedNodeId && nodes[selectedNodeId]) {
+                if (selectedNodeIds.length > 0) {
                     applyColorToSelected(color);
                     updateActiveSwatch(color);
+                    saveState();
                 }
             });
             colorPresetsContainer.appendChild(swatch);
@@ -57,10 +58,12 @@ const paletteElementsContainer = document.getElementById('palette-elements');
     }
 
     function applyColorToSelected(hexColor) {
-        if (selectedNodeId && nodes[selectedNodeId]) {
-            nodes[selectedNodeId].element.style.backgroundColor = hexColor;
-            nodes[selectedNodeId].element.style.color = getContrastYIQ(hexColor);
-        }
+        selectedNodeIds.forEach(id => {
+            if (nodes[id]) {
+                nodes[id].element.style.backgroundColor = hexColor;
+                nodes[id].element.style.color = getContrastYIQ(hexColor);
+            }
+        });
     }
 
     initColorPresets();
@@ -68,14 +71,57 @@ const paletteElementsContainer = document.getElementById('palette-elements');
     let draggedType = null;
     let draggedNode = null;
     let isDraggingNode = false;
+    let hasMovedNode = false;
     let nodeOffset = { x: 0, y: 0 };
 
 let nodes = {}; // Map of id -> { element, x, y, width, height }
     let connections = []; // Array of { sourceId, targetId, svgLine }
-    let selectedNodeId = null;
+    let selectedNodeIds = [];
+
+    // Undo/Redo State
+    let stateHistory = [];
+    let historyIndex = -1;
+    let isRestoringState = false; // flag to prevent recursion
+
+    function saveState() {
+        if (isRestoringState) return;
+
+        // If we are not at the end of the history, truncate the future
+        if (historyIndex < stateHistory.length - 1) {
+            stateHistory = stateHistory.slice(0, historyIndex + 1);
+        }
+
+        stateHistory.push(JSON.stringify(getCurrentState()));
+
+        // Optional: limit history size to prevent memory leaks
+        if (stateHistory.length > 50) {
+            stateHistory.shift();
+        } else {
+            historyIndex++;
+        }
+    }
+
+    function undo() {
+        if (historyIndex > 0) {
+            historyIndex--;
+            isRestoringState = true;
+            loadState(JSON.parse(stateHistory[historyIndex]));
+            isRestoringState = false;
+        }
+    }
+
+    function redo() {
+        if (historyIndex < stateHistory.length - 1) {
+            historyIndex++;
+            isRestoringState = true;
+            loadState(JSON.parse(stateHistory[historyIndex]));
+            isRestoringState = false;
+        }
+    }
 
     // Waypoint state
     let isDraggingWaypoint = false;
+    let hasMovedWaypoint = false;
     let draggedWaypoint = null;
     let draggedConnection = null;
 
@@ -123,6 +169,51 @@ const elementSets = {
         renderPalette(e.target.value);
     });
 
+// Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return; // don't undo diagram if typing text
+
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            } else if (e.key === 'y') {
+                e.preventDefault();
+                redo();
+            }
+        }
+
+        // Allow deleting selected nodes/connections with Backspace/Delete
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            if (selectedNodeIds.length > 0) {
+                selectedNodeIds.forEach(id => {
+                    connections = connections.filter(c => {
+                        if (c.sourceId === id || c.targetId === id) {
+                            if (c.svgGroup.parentNode) c.svgGroup.parentNode.removeChild(c.svgGroup);
+                            c.waypoints.forEach(wp => {
+                                if (wp.element.parentNode) wp.element.parentNode.removeChild(wp.element);
+                            });
+                            return false;
+                        }
+                        return true;
+                    });
+                    const node = nodes[id];
+                    if (node && node.element.parentNode) node.element.parentNode.removeChild(node.element);
+                    console.log('Deleted node', id, node !== undefined); delete nodes[id];
+                });
+                deselectAllNodes();
+                saveState();
+            }
+        }
+    });
+
+    // Initialize initial empty state
+    saveState();
+
     // --- Drag from Palette ---
     // Use event delegation for dynamically added items
     paletteElementsContainer.addEventListener('dragstart', (e) => {
@@ -168,6 +259,7 @@ const id = 'node_' + Date.now();
             element: el,
             type: type
         };
+        saveState();
 
         // Node Interaction Events
 
@@ -186,6 +278,7 @@ const id = 'node_' + Date.now();
                 el.contentEditable = false;
                 // Text change might change size, so update lines
                 updateNodePosition(id);
+                saveState();
             }
         };
 
@@ -220,30 +313,38 @@ function updateNodePosition(id) {
     // --- Dragging Existing Nodes & Selection ---
     function handleNodeMouseDown(e, id) {
         if (e.target.isContentEditable) return; // Allow normal text interaction
-
         e.stopPropagation(); // Prevent canvas background click
 
-        // Handle Selection for connections
         if (e.shiftKey) {
-            // Shift-click to connect
-            if (selectedNodeId && selectedNodeId !== id) {
-                createConnection(selectedNodeId, id);
-                deselectNode();
-            } else {
+            const lastSelectedId = selectedNodeIds[selectedNodeIds.length - 1];
+            if (lastSelectedId && lastSelectedId !== id) {
+                createConnection(lastSelectedId, id);
+                deselectAllNodes();
                 selectNode(id);
+            } else {
+                selectNode(id, true);
             }
+            return;
+        } else if (e.ctrlKey || e.metaKey) {
+            selectNode(id, true);
             return;
         }
 
-        // Handle normal drag
-        selectNode(id);
-        isDraggingNode = true;
-        draggedNode = id;
+        if (!selectedNodeIds.includes(id)) {
+            selectNode(id);
+        }
+        console.log("Mouse down on node:", id, "selectedNodeIds:", selectedNodeIds);
 
-const rect = nodes[id].element.getBoundingClientRect();
-        // Calculate offset in unscaled coordinates
-        nodeOffset.x = (e.clientX - rect.left) / scale;
-        nodeOffset.y = (e.clientY - rect.top) / scale;
+        isDraggingNode = true;
+
+        selectedNodeIds.forEach(selId => {
+            const node = nodes[selId];
+            if (node) {
+                const rect = node.element.getBoundingClientRect();
+                node.dragOffsetX = (e.clientX - rect.left) / scale;
+                node.dragOffsetY = (e.clientY - rect.top) / scale;
+            }
+        });
 
         document.addEventListener('mousemove', handleNodeMouseMove);
         document.addEventListener('mouseup', handleNodeMouseUp);
@@ -265,26 +366,30 @@ function handleNodeMouseMove(e) {
             draggedWaypoint.element.setAttribute('cx', draggedWaypoint.x);
             draggedWaypoint.element.setAttribute('cy', draggedWaypoint.y);
             updateConnections();
+            hasMovedWaypoint = true;
             return;
         }
 
-        if (!isDraggingNode || !draggedNode) return;
+        if (!isDraggingNode || selectedNodeIds.length === 0) return;
 
         const containerRect = canvasContainer.getBoundingClientRect();
 
-        // Calculate new position
-        let newX = (e.clientX - containerRect.left - panX) / scale - nodeOffset.x;
-        let newY = (e.clientY - containerRect.top - panY) / scale - nodeOffset.y;
+        selectedNodeIds.forEach(selId => {
+            const node = nodes[selId];
+            if (node) {
+                let newX = (e.clientX - containerRect.left - panX) / scale - (node.dragOffsetX || 0);
+                let newY = (e.clientY - containerRect.top - panY) / scale - (node.dragOffsetY || 0);
 
-        // Snap to grid
-        newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-        newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+                // Snap to grid
+                newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+                newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
 
-// Apply
-        const el = nodes[draggedNode].element;
-        el.style.left = newX + 'px';
-        el.style.top = newY + 'px';
-        updateNodePosition(draggedNode);
+                node.element.style.left = newX + 'px';
+                node.element.style.top = newY + 'px';
+                updateNodePosition(node.id);
+            }
+        });
+        hasMovedNode = true;
     }
 
 
@@ -295,14 +400,17 @@ function handleNodeMouseUp(e) {
             draggedConnection = null;
             document.removeEventListener('mousemove', handleNodeMouseMove);
             document.removeEventListener('mouseup', handleNodeMouseUp);
+            saveState();
             return;
         }
 
-        isDraggingNode = false;
-
-        draggedNode = null;
-        document.removeEventListener('mousemove', handleNodeMouseMove);
-        document.removeEventListener('mouseup', handleNodeMouseUp);
+        if (isDraggingNode) {
+            isDraggingNode = false;
+            draggedNode = null;
+            document.removeEventListener('mousemove', handleNodeMouseMove);
+            document.removeEventListener('mouseup', handleNodeMouseUp);
+            saveState();
+        }
     }
 
     // --- Node Properties ---
@@ -346,38 +454,82 @@ colorPicker.addEventListener('input', (e) => {
         return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
     }
 
-function selectNode(id) {
-        deselectNode();
-        selectedNodeId = id;
-        nodes[id].element.classList.add('selected');
+    function selectNode(id, addToSelection = false) {
+        if (!addToSelection) deselectAllNodes();
+        if (!selectedNodeIds.includes(id)) {
+            selectedNodeIds.push(id);
+            nodes[id].element.classList.add('selected');
 
-        // Update color UI
-        const bgColor = window.getComputedStyle(nodes[id].element).backgroundColor;
-        const hexBg = rgbToHex(bgColor);
-        colorPicker.disabled = false;
-        colorPresetsContainer.classList.remove('disabled');
-        updateActiveSwatch(hexBg);
+            if (selectedNodeIds.length === 1) {
+                const rgb = window.getComputedStyle(nodes[id].element).backgroundColor;
+                const hex = rgbToHex(rgb);
+                colorPicker.disabled = false;
+                colorPresetsContainer.classList.remove('disabled');
+                colorPicker.value = hex;
+                updateActiveSwatch(hex);
+            } else {
+                colorPicker.disabled = true;
+                colorPresetsContainer.classList.add('disabled');
+            }
+        } else if (addToSelection) {
+            // toggle off
+            nodes[id].element.classList.remove('selected');
+            selectedNodeIds = selectedNodeIds.filter(selId => selId !== id);
+
+            if (selectedNodeIds.length === 1) {
+                const rgb = window.getComputedStyle(nodes[selectedNodeIds[0]].element).backgroundColor;
+                const hex = rgbToHex(rgb);
+                colorPicker.disabled = false;
+                colorPresetsContainer.classList.remove('disabled');
+                colorPicker.value = hex;
+                updateActiveSwatch(hex);
+            } else if (selectedNodeIds.length === 0) {
+                colorPicker.disabled = true;
+                colorPresetsContainer.classList.add('disabled');
+            }
+        }
     }
 
-function deselectNode() {
-        if (selectedNodeId && nodes[selectedNodeId]) {
-            nodes[selectedNodeId].element.classList.remove('selected');
-        }
-        selectedNodeId = null;
+    function deselectAllNodes() {
+        selectedNodeIds.forEach(id => {
+            if (nodes[id]) nodes[id].element.classList.remove('selected');
+        });
+        selectedNodeIds = [];
         colorPicker.disabled = true;
         colorPresetsContainer.classList.add('disabled');
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
     }
 
-canvasContainer.addEventListener('mousedown', (e) => {
-        if (e.target === canvasContainer || e.target === canvas || e.target === svgLayer) {
-            deselectNode();
+    let isSelecting = false;
+    let startSelectionX = 0;
+    let startSelectionY = 0;
+    let selectionBox = null;
 
-            // Start panning
-            isPanningCanvas = true;
-            panStartX = e.clientX - panX;
-            panStartY = e.clientY - panY;
-            canvasContainer.classList.add('panning');
+    canvasContainer.addEventListener('mousedown', (e) => {
+        if (e.target === canvasContainer || e.target === canvas || e.target === svgLayer) {
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                deselectAllNodes();
+            }
+
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                // Drag to select
+                isSelecting = true;
+                startSelectionX = e.clientX;
+                startSelectionY = e.clientY;
+                selectionBox = document.createElement('div');
+                selectionBox.style.position = 'absolute';
+                selectionBox.style.border = '1px dashed #007bff';
+                selectionBox.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+                selectionBox.style.pointerEvents = 'none';
+                selectionBox.style.zIndex = '1000';
+                canvasContainer.appendChild(selectionBox);
+            } else {
+                // Start panning
+                isPanningCanvas = true;
+                panStartX = e.clientX - panX;
+                panStartY = e.clientY - panY;
+                canvasContainer.classList.add('panning');
+            }
         }
     });
 
@@ -386,13 +538,54 @@ canvasContainer.addEventListener('mousedown', (e) => {
             panX = e.clientX - panStartX;
             panY = e.clientY - panStartY;
             applyTransform();
+        } else if (isSelecting && selectionBox) {
+            const currentX = e.clientX;
+            const currentY = e.clientY;
+
+            const rect = canvasContainer.getBoundingClientRect();
+            const left = Math.min(startSelectionX, currentX) - rect.left;
+            const top = Math.min(startSelectionY, currentY) - rect.top;
+            const width = Math.abs(currentX - startSelectionX);
+            const height = Math.abs(currentY - startSelectionY);
+
+            selectionBox.style.left = `${left}px`;
+            selectionBox.style.top = `${top}px`;
+            selectionBox.style.width = `${width}px`;
+            selectionBox.style.height = `${height}px`;
         }
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
         if (isPanningCanvas) {
             isPanningCanvas = false;
             canvasContainer.classList.remove('panning');
+        } else if (isSelecting) {
+            isSelecting = false;
+
+            if (selectionBox) {
+                const currentX = e.clientX;
+                const currentY = e.clientY;
+
+                const minX = Math.min(startSelectionX, currentX);
+                const maxX = Math.max(startSelectionX, currentX);
+                const minY = Math.min(startSelectionY, currentY);
+                const maxY = Math.max(startSelectionY, currentY);
+
+                // Check intersection
+                Object.values(nodes).forEach(n => {
+                    const nodeRect = n.element.getBoundingClientRect();
+                    // Intersect logic
+                    if (nodeRect.left < maxX && nodeRect.right > minX &&
+                        nodeRect.top < maxY && nodeRect.bottom > minY) {
+                        selectNode(n.id, true);
+                    }
+                });
+
+                if (selectionBox.parentNode) {
+                    selectionBox.parentNode.removeChild(selectionBox);
+                }
+                selectionBox = null;
+            }
         }
     });
 
@@ -581,6 +774,7 @@ circle.addEventListener('mousedown', (we) => {
                 });
 
                 updateConnections();
+                saveState();
                 return;
             }
 
@@ -601,6 +795,7 @@ circle.addEventListener('mousedown', (we) => {
                 connectionObj.line2.style.display = 'none';
             }
             updateConnections();
+            saveState();
         });
 
 group.addEventListener('dblclick', (e) => {
@@ -640,6 +835,7 @@ const input = document.createElement('input');
                     input.parentNode.removeChild(input);
                 }
                 updateConnections();
+                saveState();
             };
 
             input.addEventListener('blur', saveLabel);
@@ -662,6 +858,7 @@ const input = document.createElement('input');
             });
             svgLayer.removeChild(group);
             connections = connections.filter(c => c.id !== connectionObj.id);
+            saveState();
         });
 
         connections.push(connectionObj);
@@ -791,6 +988,105 @@ conn.line1.setAttribute('d', path1D);
         });
     }
 // --- Save and Load JSON ---
+function getCurrentState() {
+        return {
+            scale: scale,
+            panX: panX,
+            panY: panY,
+            nodes: Object.values(nodes).map(n => ({
+                id: n.id,
+                type: n.type,
+                textContent: n.element.textContent,
+                x: n.x,
+                y: n.y,
+                width: n.width,
+                height: n.height,
+                backgroundColor: window.getComputedStyle(n.element).backgroundColor,
+                color: window.getComputedStyle(n.element).color
+            })),
+            connections: connections.map(c => ({
+                sourceId: c.sourceId,
+                targetId: c.targetId,
+                flow: c.flow,
+                label: c.label,
+                waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
+            }))
+        };
+    }
+
+    function loadState(state) {
+        clearCanvas();
+
+        scale = state.scale || 1;
+        panX = state.panX || 0;
+        panY = state.panY || 0;
+        applyTransform();
+
+        // Restore nodes
+        if (state.nodes) {
+            state.nodes.forEach(nData => {
+                const el = document.createElement('div');
+                el.className = 'node';
+                el.textContent = nData.textContent || nData.type;
+
+                el.style.left = nData.x + 'px';
+                el.style.top = nData.y + 'px';
+                // Convert rgb string back to hex if needed, or just apply it
+                el.style.backgroundColor = nData.backgroundColor || 'white';
+                el.style.color = nData.color || 'black';
+
+                canvas.appendChild(el);
+
+                nodes[nData.id] = {
+                    id: nData.id,
+                    element: el,
+                    type: nData.type,
+                    x: nData.x,
+                    y: nData.y,
+                    width: nData.width || 80,
+                    height: nData.height || 54,
+                    centerX: nData.x + (nData.width || 80) / 2,
+                    centerY: nData.y + (nData.height || 54) / 2
+                };
+
+                el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, nData.id));
+                el.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    el.contentEditable = true;
+                    el.focus();
+                    document.execCommand('selectAll', false, null);
+                });
+
+                const finishEditing = () => {
+                    if (el.contentEditable === 'true') {
+                        el.contentEditable = false;
+                        updateNodePosition(nData.id);
+                    }
+                };
+                el.addEventListener('blur', finishEditing);
+                el.addEventListener('keydown', (ke) => {
+                    if (ke.key === 'Enter') {
+                        ke.preventDefault();
+                        finishEditing();
+                    }
+                });
+
+                // Force layout calculations after appending
+                setTimeout(() => { updateNodePosition(nData.id); }, 0);
+            });
+        }
+
+        // Restore connections
+        if (state.connections) {
+            // we need to wait for nodes to be properly positioned before drawing lines
+            setTimeout(() => {
+                state.connections.forEach(cData => {
+                    createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
+                });
+            }, 10);
+        }
+    }
+
     function clearCanvas() {
         // Remove all nodes
         Object.values(nodes).forEach(n => {
@@ -813,7 +1109,7 @@ conn.line1.setAttribute('d', path1D);
         });
         connections = [];
 
-        deselectNode();
+        deselectAllNodes();
         scale = 1;
         panX = 0;
         panY = 0;
@@ -823,34 +1119,12 @@ conn.line1.setAttribute('d', path1D);
     btnClear.addEventListener('click', () => {
         if (confirm('Are you sure you want to clear the canvas?')) {
             clearCanvas();
+            saveState();
         }
     });
 
-    btnSave.addEventListener('click', () => {
-        const state = {
-            scale: scale,
-            panX: panX,
-            panY: panY,
-            nodes: Object.values(nodes).map(n => ({
-                id: n.id,
-                type: n.type,
-                textContent: n.element.textContent,
-                x: n.x,
-                y: n.y,
-                width: n.width,
-                height: n.height,
-                backgroundColor: window.getComputedStyle(n.element).backgroundColor,
-                color: window.getComputedStyle(n.element).color
-            })),
-connections: connections.map(c => ({
-                sourceId: c.sourceId,
-                targetId: c.targetId,
-                flow: c.flow,
-                label: c.label,
-                waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
-            }))
-        };
-
+btnSave.addEventListener('click', () => {
+        const state = getCurrentState();
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
@@ -864,7 +1138,7 @@ connections: connections.map(c => ({
         loadFile.click();
     });
 
-    loadFile.addEventListener('change', (e) => {
+loadFile.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -872,76 +1146,7 @@ connections: connections.map(c => ({
         reader.onload = function(evt) {
             try {
                 const state = JSON.parse(evt.target.result);
-                clearCanvas();
-
-                scale = state.scale || 1;
-                panX = state.panX || 0;
-                panY = state.panY || 0;
-                applyTransform();
-
-                // Restore nodes
-                if (state.nodes) {
-                    state.nodes.forEach(nData => {
-                        const el = document.createElement('div');
-                        el.className = 'node';
-                        el.textContent = nData.textContent || nData.type;
-
-el.style.left = nData.x + 'px';
-                        el.style.top = nData.y + 'px';
-                        // Convert rgb string back to hex if needed, or just apply it
-                        el.style.backgroundColor = nData.backgroundColor || 'white';
-                        el.style.color = nData.color || 'black';
-
-                        canvas.appendChild(el);
-
-                        nodes[nData.id] = {
-                            id: nData.id,
-                            element: el,
-                            type: nData.type,
-                            x: nData.x,
-                            y: nData.y,
-                            width: nData.width || 80,
-                            height: nData.height || 54,
-                            centerX: nData.x + (nData.width || 80) / 2,
-                            centerY: nData.y + (nData.height || 54) / 2
-                        };
-
-                        el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, nData.id));
-                        el.addEventListener('dblclick', (e) => {
-                            e.stopPropagation();
-                            el.contentEditable = true;
-                            el.focus();
-                            document.execCommand('selectAll', false, null);
-                        });
-
-                        const finishEditing = () => {
-                            if (el.contentEditable === 'true') {
-                                el.contentEditable = false;
-                                updateNodePosition(nData.id);
-                            }
-                        };
-                        el.addEventListener('blur', finishEditing);
-                        el.addEventListener('keydown', (ke) => {
-                            if (ke.key === 'Enter') {
-                                ke.preventDefault();
-                                finishEditing();
-                            }
-                        });
-
-                        // Force layout calculations after appending
-                        setTimeout(() => { updateNodePosition(nData.id); }, 0);
-                    });
-                }
-
-// Restore connections
-                if (state.connections) {
-                    // we need to wait for nodes to be properly positioned before drawing lines
-                    setTimeout(() => {
-                        state.connections.forEach(cData => {
-                            createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
-                        });
-                    }, 10);
-                }
+                loadState(state);
             } catch (err) {
                 console.error(err);
                 alert('Error parsing JSON file');
