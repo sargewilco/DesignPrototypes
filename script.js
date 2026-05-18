@@ -69,6 +69,11 @@ const paletteElementsContainer = document.getElementById('palette-elements');
     initColorPresets();
 
     let draggedType = null;
+    const radialMenu = document.createElement('div');
+    radialMenu.className = 'radial-menu';
+    canvasContainer.appendChild(radialMenu);
+
+    let currentNetworkSet = 'standard';
     let draggedNode = null;
     let isDraggingNode = false;
     let hasMovedNode = false;
@@ -150,6 +155,7 @@ const elementSets = {
     };
 
     function renderPalette(setKey) {
+        currentNetworkSet = setKey;
         paletteElementsContainer.innerHTML = '';
         const items = elementSets[setKey] || [];
         items.forEach(type => {
@@ -213,6 +219,128 @@ const elementSets = {
 
     // Initialize initial empty state
     saveState();
+
+    function hideRadialMenu() {
+
+        radialMenu.classList.remove('visible');
+    }
+
+    function showRadialMenu(nodeId) {
+
+        if (selectedNodeIds.length !== 1) {
+            hideRadialMenu();
+            return;
+        }
+
+        const node = nodes[nodeId];
+        if (!node) return;
+
+        // Position menu at the center of the node
+        radialMenu.style.left = `${node.centerX * scale + panX}px`;
+        radialMenu.style.top = `${node.centerY * scale + panY}px`;
+
+        // Build items based on current palette
+        radialMenu.innerHTML = '';
+        const items = elementSets[currentNetworkSet] || [];
+
+        // Calculate circle math
+        const radius = 60; // distance from center
+        const angleStep = (2 * Math.PI) / items.length;
+
+        items.forEach((itemType, index) => {
+            const angle = index * angleStep - Math.PI / 2; // start at top
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+
+            const btn = document.createElement('div');
+            btn.className = 'radial-item';
+            btn.style.left = `calc(50% + ${x}px - 18px)`; // 18 is half width
+            btn.style.top = `calc(50% + ${y}px - 18px)`;
+
+            // Abbreviate text if too long
+            btn.textContent = itemType.length > 5 ? itemType.substring(0, 4) + '.' : itemType;
+            btn.title = itemType; // tooltip
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                quickSpawnNode(nodeId, itemType, angle);
+                hideRadialMenu();
+            });
+
+            radialMenu.appendChild(btn);
+        });
+
+        radialMenu.classList.add('visible');
+    }
+
+    function quickSpawnNode(sourceId, type, angle) {
+        const sourceNode = nodes[sourceId];
+        if (!sourceNode) return;
+
+        const spawnDistance = 120; // Distance to spawn new node
+        const newX = sourceNode.x + Math.cos(angle) * spawnDistance;
+        const newY = sourceNode.y + Math.sin(angle) * spawnDistance;
+
+        // Snap to grid
+        const snapX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+        const snapY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+
+        // Create new node element
+        const id = 'node_' + Date.now();
+        const el = document.createElement('div');
+        el.className = 'node';
+        el.textContent = type;
+        el.style.left = snapX + 'px';
+        el.style.top = snapY + 'px';
+
+        canvas.appendChild(el);
+
+        nodes[id] = {
+            id: id,
+            element: el,
+            type: type,
+            x: snapX,
+            y: snapY,
+            width: 80,
+            height: 54,
+            centerX: snapX + 40,
+            centerY: snapY + 27
+        };
+
+        el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, id));
+        el.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            el.contentEditable = true;
+            el.focus();
+            document.execCommand('selectAll', false, null);
+        });
+
+        const finishEditing = () => {
+            if (el.contentEditable === 'true') {
+                el.contentEditable = false;
+                updateNodePosition(id);
+                saveState();
+            }
+        };
+
+        el.addEventListener('blur', finishEditing);
+        el.addEventListener('keydown', (ke) => {
+            if (ke.key === 'Enter') {
+                ke.preventDefault();
+                finishEditing();
+            }
+        });
+
+        // Create connection
+        createConnection(sourceId, id);
+
+        // Select the newly spawned node
+        setTimeout(() => {
+            updateNodePosition(id);
+            selectNode(id);
+            saveState();
+        }, 10);
+    }
 
     // --- Drag from Palette ---
     // Use event delegation for dynamically added items
@@ -333,7 +461,7 @@ function updateNodePosition(id) {
         if (!selectedNodeIds.includes(id)) {
             selectNode(id);
         }
-        console.log("Mouse down on node:", id, "selectedNodeIds:", selectedNodeIds);
+
 
         isDraggingNode = true;
 
@@ -372,6 +500,7 @@ function handleNodeMouseMove(e) {
 
         if (!isDraggingNode || selectedNodeIds.length === 0) return;
 
+        hideRadialMenu(); // hide when actually dragging
         const containerRect = canvasContainer.getBoundingClientRect();
 
         selectedNodeIds.forEach(selId => {
@@ -409,6 +538,9 @@ function handleNodeMouseUp(e) {
             draggedNode = null;
             document.removeEventListener('mousemove', handleNodeMouseMove);
             document.removeEventListener('mouseup', handleNodeMouseUp);
+            if (selectedNodeIds.length === 1) {
+                showRadialMenu(selectedNodeIds[0]);
+            }
             saveState();
         }
     }
@@ -460,23 +592,25 @@ colorPicker.addEventListener('input', (e) => {
             selectedNodeIds.push(id);
             nodes[id].element.classList.add('selected');
 
-            if (selectedNodeIds.length === 1) {
-                const rgb = window.getComputedStyle(nodes[id].element).backgroundColor;
+            if (selectedNodeIds.length > 0) {
+                const rgb = window.getComputedStyle(nodes[selectedNodeIds[0]].element).backgroundColor;
                 const hex = rgbToHex(rgb);
                 colorPicker.disabled = false;
                 colorPresetsContainer.classList.remove('disabled');
                 colorPicker.value = hex;
                 updateActiveSwatch(hex);
+            }
+            if (selectedNodeIds.length === 1) {
+                showRadialMenu(selectedNodeIds[0]);
             } else {
-                colorPicker.disabled = true;
-                colorPresetsContainer.classList.add('disabled');
+                hideRadialMenu();
             }
         } else if (addToSelection) {
             // toggle off
             nodes[id].element.classList.remove('selected');
             selectedNodeIds = selectedNodeIds.filter(selId => selId !== id);
 
-            if (selectedNodeIds.length === 1) {
+            if (selectedNodeIds.length > 0) {
                 const rgb = window.getComputedStyle(nodes[selectedNodeIds[0]].element).backgroundColor;
                 const hex = rgbToHex(rgb);
                 colorPicker.disabled = false;
@@ -487,10 +621,17 @@ colorPicker.addEventListener('input', (e) => {
                 colorPicker.disabled = true;
                 colorPresetsContainer.classList.add('disabled');
             }
+
+            if (selectedNodeIds.length === 1) {
+                showRadialMenu(selectedNodeIds[0]);
+            } else {
+                hideRadialMenu();
+            }
         }
     }
 
     function deselectAllNodes() {
+        hideRadialMenu();
         selectedNodeIds.forEach(id => {
             if (nodes[id]) nodes[id].element.classList.remove('selected');
         });
@@ -518,6 +659,7 @@ colorPicker.addEventListener('input', (e) => {
                 panStartX = e.clientX - panX;
                 panStartY = e.clientY - panY;
                 canvasContainer.classList.add('panning');
+                hideRadialMenu();
             } else if (e.button === 0) {
                 // Normal left click-and-drag to select
                 isSelecting = true;
@@ -617,6 +759,9 @@ colorPicker.addEventListener('input', (e) => {
 
         scale = newScale;
         applyTransform();
+        if (selectedNodeIds.length === 1) {
+            showRadialMenu();
+        }
     }, { passive: false });
 
     // --- Connections ---

@@ -269,3 +269,56 @@ body, html {
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     transform: translate(-50%, -50%);
 }
+
+/* Radial Menu */
+.radial-menu {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    transform: translate(-50%, -50%);
+}
+
+.radial-menu.visible {
+    opacity: 1;
+    pointer-events: none; /* Let clicks pass through the wrapper itself */
+}
+
+.radial-menu.visible .radial-item {
+    pointer-events: auto; /* Only items should intercept clicks */
+}
+
+.radial-menu {
+    /* Need to ensure z-index is higher than nodes */
+    z-index: 1000 !important;
+}
+
+.radial-item {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    background-color: white;
+    border: 2px solid #007bff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: transform 0.1s, background-color 0.1s;
+    user-select: none;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.radial-item:hover {
+    transform: scale(1.15);
+    background-color: #f0f8ff;
+}
