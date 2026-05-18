@@ -137,27 +137,7 @@ body, html {
     stroke-width: 3;
 }
 
-.connection.animated {
-    stroke-dasharray: 10;
-    animation: dash 1s linear infinite;
-}
 
-.connection.animated-reverse {
-    stroke-dasharray: 10;
-    animation: dash-reverse 1s linear infinite;
-}
-
-@keyframes dash {
-    to {
-        stroke-dashoffset: -20;
-    }
-}
-
-@keyframes dash-reverse {
-    to {
-        stroke-dashoffset: 20;
-    }
-}
 
 
 .connection-hitarea {
@@ -321,4 +301,37 @@ body, html {
 .radial-item:hover {
     transform: scale(1.15);
     background-color: #f0f8ff;
+}
+
+/* Status Select */
+.status-select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: white;
+    font-size: 14px;
+}
+.status-select:disabled {
+    background-color: #eee;
+    color: #999;
+}
+
+/* Packet Animation */
+.packet {
+    fill: #28a745;
+    filter: drop-shadow(0 0 3px #28a745);
+    pointer-events: none;
+    transition: fill 0.3s, filter 0.3s;
+}
+
+.connection-group[data-status="congested"] .packet {
+    fill: #ffc107;
+    filter: drop-shadow(0 0 3px #ffc107);
+}
+
+.connection-group[data-status="down"] .packet {
+    fill: #dc3545;
+    display: none;
 }

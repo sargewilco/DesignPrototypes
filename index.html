@@ -22,7 +22,7 @@
             <hr style="width: 100%; border: 1px solid #ccc; margin: 15px 0;">
 
 <h2>Properties</h2>
-            <div class="property-group">
+            <div class="property-group" id="node-properties" style="display: block;">
                 <label>Background Color:</label>
                 <div id="color-presets" class="color-presets disabled">
                     <!-- Dynamically populated -->
@@ -30,6 +30,18 @@
                 <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
                     <label for="node-color" style="font-size: 0.9em; color: #555;">Custom:</label>
                     <input type="color" id="node-color" value="#ffffff" disabled>
+                </div>
+            </div>
+
+            <div class="property-group" id="connection-properties" style="display: none;">
+                <label>Connection Status:</label>
+                <select id="connection-status" class="status-select">
+                    <option value="normal">🟢 Normal</option>
+                    <option value="congested">🟡 Congested</option>
+                    <option value="down">🔴 Down</option>
+                </select>
+                <div style="margin-top: 10px; font-size: 0.85em; color: #666;">
+                    Select a connection to change its traffic status.
                 </div>
             </div>
 

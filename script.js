@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvasContainer = document.getElementById('canvas-container');
     const svgLayer = document.getElementById('connection-layer');
 const colorPicker = document.getElementById('node-color');
+    const nodePropertiesDiv = document.getElementById('node-properties');
+    const connectionPropertiesDiv = document.getElementById('connection-properties');
+    const connectionStatusSelect = document.getElementById('connection-status');
     const colorPresetsContainer = document.getElementById('color-presets');
     const networkTypeSelector = document.getElementById('network-type-selector');
 const paletteElementsContainer = document.getElementById('palette-elements');
@@ -82,6 +85,7 @@ const paletteElementsContainer = document.getElementById('palette-elements');
 let nodes = {}; // Map of id -> { element, x, y, width, height }
     let connections = []; // Array of { sourceId, targetId, svgLine }
     let selectedNodeIds = [];
+    let selectedConnectionId = null;
 
     // Undo/Redo State
     let stateHistory = [];
@@ -639,6 +643,19 @@ colorPicker.addEventListener('input', (e) => {
         colorPicker.disabled = true;
         colorPresetsContainer.classList.add('disabled');
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+
+        nodePropertiesDiv.style.display = 'block';
+        connectionPropertiesDiv.style.display = 'none';
+
+        if (selectedConnectionId) {
+            const conn = connections.find(c => c.id === selectedConnectionId);
+            if (conn) {
+                conn.hitArea.style.stroke = 'transparent';
+                conn.line1.style.stroke = '';
+                conn.line2.style.stroke = '';
+            }
+            selectedConnectionId = null;
+        }
     }
 
     let isSelecting = false;
@@ -760,11 +777,35 @@ colorPicker.addEventListener('input', (e) => {
         scale = newScale;
         applyTransform();
         if (selectedNodeIds.length === 1) {
-            showRadialMenu();
+            showRadialMenu(selectedNodeIds[0]);
         }
     }, { passive: false });
 
     // --- Connections ---
+    connectionStatusSelect.addEventListener('change', (e) => {
+        if (selectedConnectionId) {
+            const conn = connections.find(c => c.id === selectedConnectionId);
+            if (conn) {
+                conn.status = e.target.value;
+                conn.svgGroup.dataset.status = conn.status;
+                // clear and respawn packets on status change
+                conn.packets.forEach(p => {
+                    if (p.element.parentNode) {
+                        p.element.parentNode.removeChild(p.element);
+                    }
+                });
+                conn.packets = [];
+
+                if (conn.status !== 'down') {
+                    spawnPacket(conn, 'forward');
+                    if (conn.flow === 'bidirectional') {
+                        spawnPacket(conn, 'reverse');
+                    }
+                }
+                saveState();
+            }
+        }
+    });
 function createConnection(sourceId, targetId, initialFlow = 'forward', initialWaypoints = [], initialLabel = '') {
         // Prevent duplicate connections
         if (connections.some(c => (c.sourceId === sourceId && c.targetId === targetId) || (c.sourceId === targetId && c.targetId === sourceId))) {
@@ -778,10 +819,10 @@ function createConnection(sourceId, targetId, initialFlow = 'forward', initialWa
         hitArea.classList.add('connection-hitarea');
 
         const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        line1.classList.add('connection', 'animated');
+        line1.classList.add('connection');
 
         const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        line2.classList.add('connection', 'animated-reverse');
+        line2.classList.add('connection');
         line2.style.display = 'none';
 
         const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -805,14 +846,14 @@ function createConnection(sourceId, targetId, initialFlow = 'forward', initialWa
             textLabel: textLabel,
             flow: initialFlow, // 'forward', 'reverse', 'bidirectional'
             label: initialLabel,
-            waypoints: []
+            waypoints: [],
+            status: 'normal', // normal, congested, down
+            packets: [] // array of { element, position (0 to 1), speed, direction }
         };
+        group.dataset.status = 'normal';
 
         // Apply initial flow UI
-        if (initialFlow === 'reverse') {
-            line1.classList.remove('animated');
-            line1.classList.add('animated-reverse');
-        } else if (initialFlow === 'bidirectional') {
+        if (initialFlow === 'bidirectional') {
             line2.style.display = '';
         }
 
@@ -840,6 +881,23 @@ function createConnection(sourceId, targetId, initialFlow = 'forward', initialWa
 
 group.addEventListener('click', (e) => {
             e.stopPropagation();
+
+            // Single click logic
+            if (e.detail === 1) {
+                deselectAllNodes();
+                selectedConnectionId = connectionObj.id;
+
+                // Highlight
+                connectionObj.hitArea.style.stroke = 'rgba(0, 123, 255, 0.25)';
+                connectionObj.line1.style.stroke = '#007bff';
+                connectionObj.line2.style.stroke = '#007bff';
+
+                // Show properties
+                nodePropertiesDiv.style.display = 'none';
+                connectionPropertiesDiv.style.display = 'block';
+                connectionStatusSelect.value = connectionObj.status;
+            }
+
             if (e.detail === 2) {
                 // Double click logic!
                 // If another editor is open, close it
@@ -925,21 +983,30 @@ circle.addEventListener('mousedown', (we) => {
             }
 
             if (connectionObj.flow === 'forward') {
-
                 connectionObj.flow = 'reverse';
-                connectionObj.line1.classList.remove('animated');
-                connectionObj.line1.classList.add('animated-reverse');
             } else if (connectionObj.flow === 'reverse') {
                 connectionObj.flow = 'bidirectional';
-                connectionObj.line1.classList.remove('animated-reverse');
-                connectionObj.line1.classList.add('animated');
                 connectionObj.line2.style.display = '';
             } else {
                 connectionObj.flow = 'forward';
-                connectionObj.line1.classList.remove('animated-reverse');
-                connectionObj.line1.classList.add('animated');
                 connectionObj.line2.style.display = 'none';
             }
+
+            // clear and respawn packets on flow change
+            connectionObj.packets.forEach(p => {
+                if (p.element.parentNode) p.element.parentNode.removeChild(p.element);
+            });
+            connectionObj.packets = [];
+
+            if (connectionObj.status !== 'down') {
+                if (connectionObj.flow === 'forward' || connectionObj.flow === 'bidirectional') {
+                    spawnPacket(connectionObj, 'forward');
+                }
+                if (connectionObj.flow === 'reverse' || connectionObj.flow === 'bidirectional') {
+                    spawnPacket(connectionObj, 'reverse');
+                }
+            }
+
             updateConnections();
             saveState();
         });
@@ -1009,7 +1076,36 @@ const input = document.createElement('input');
 
         connections.push(connectionObj);
 
+        spawnPacket(connectionObj, 'forward');
+        if (initialFlow === 'bidirectional') {
+            spawnPacket(connectionObj, 'reverse');
+        }
+
         updateConnections();
+        return connectionObj;
+    }
+
+    function spawnPacket(conn, direction) {
+        if (conn.status === 'down') return;
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('r', 4);
+        circle.classList.add('packet');
+        conn.svgGroup.appendChild(circle);
+
+        // Ensure text label stays on top
+        if (conn.textLabel.parentNode) {
+            conn.svgGroup.appendChild(conn.textLabel);
+        }
+
+        const speed = conn.status === 'congested' ? 0.002 : 0.005;
+
+        conn.packets.push({
+            element: circle,
+            position: direction === 'forward' ? 0 : 1,
+            direction: direction,
+            speed: speed
+        });
     }
 
 
@@ -1100,6 +1196,7 @@ conn.line1.setAttribute('d', path1D);
                     if (i === 0) centerPathD += `M ${p.x} ${p.y} `;
                     else centerPathD += `L ${p.x} ${p.y} `;
                 });
+                if (centerPathD === '') centerPathD = `M 0 0 L 0 0`; // fallback
                 conn.hitArea.setAttribute('d', centerPathD);
 
                 // Calculate midpoint for label
@@ -1130,9 +1227,85 @@ conn.line1.setAttribute('d', path1D);
                 conn.textLabel.setAttribute('x', midX);
                 conn.textLabel.setAttribute('y', midY);
                 // Offset slightly so it's above the line if preferred, or centered. We'll do centered with stroke.
+
+                if (conn.packets && conn.packets.length > 0) {
+                     conn.packets.forEach(packet => {
+                        let pTargetLen = packet.position * totalLength;
+                        let pCurrentLen = 0;
+                        let pPos = { x: points[0].x, y: points[0].y };
+
+                        if (totalLength > 0) {
+                            for (let seg of segments) {
+                                if (pCurrentLen + seg.len >= pTargetLen) {
+                                    const ratio = seg.len === 0 ? 0 : (pTargetLen - pCurrentLen) / seg.len;
+                                    pPos.x = seg.p1.x + (seg.p2.x - seg.p1.x) * ratio;
+                                    pPos.y = seg.p1.y + (seg.p2.y - seg.p1.y) * ratio;
+                                    break;
+                                }
+                                pCurrentLen += seg.len;
+                            }
+                        }
+
+                        // Offset packets if bidirectional
+                        if (conn.flow === 'bidirectional') {
+                             let offset = 5;
+                             // Find which segment we are on
+                             let pCurrentLen2 = 0;
+                             let currentSegIndex = 0;
+                             for (let i=0; i<segments.length; i++) {
+                                 if (pCurrentLen2 + segments[i].len >= pTargetLen) {
+                                     currentSegIndex = i;
+                                     break;
+                                 }
+                                 pCurrentLen2 += segments[i].len;
+                             }
+                             if (currentSegIndex < segments.length) {
+                                 const seg = segments[currentSegIndex];
+                                 const n = getNormal(seg.p1, seg.p2);
+                                 if (packet.direction === 'reverse') {
+                                     pPos.x -= n.nx * offset;
+                                     pPos.y -= n.ny * offset;
+                                 } else {
+                                     pPos.x += n.nx * offset;
+                                     pPos.y += n.ny * offset;
+                                 }
+                             }
+                        }
+
+                        packet.element.setAttribute('cx', pPos.x);
+                        packet.element.setAttribute('cy', pPos.y);
+                    });
+                }
             }
         });
     }
+
+    function animationLoop() {
+        let hasChanges = false;
+        connections.forEach(conn => {
+            if (conn.status === 'down') return;
+            if (!conn.packets || conn.packets.length === 0) return;
+
+            hasChanges = true;
+
+            conn.packets.forEach(packet => {
+                if (packet.direction === 'forward') {
+                    packet.position += packet.speed;
+                    if (packet.position > 1) packet.position = 0;
+                } else {
+                    packet.position -= packet.speed;
+                    if (packet.position < 0) packet.position = 1;
+                }
+            });
+        });
+
+        if (hasChanges) {
+            updateConnections();
+        }
+        requestAnimationFrame(animationLoop);
+    }
+
+    requestAnimationFrame(animationLoop);
 // --- Save and Load JSON ---
 function getCurrentState() {
         return {
@@ -1155,6 +1328,7 @@ function getCurrentState() {
                 targetId: c.targetId,
                 flow: c.flow,
                 label: c.label,
+                status: c.status,
                 waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
             }))
         };
@@ -1227,7 +1401,27 @@ function getCurrentState() {
             // we need to wait for nodes to be properly positioned before drawing lines
             setTimeout(() => {
                 state.connections.forEach(cData => {
-                    createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
+                    const conn = createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
+                    if (conn) {
+                        conn.status = cData.status || 'normal';
+                        conn.svgGroup.dataset.status = conn.status;
+
+                        // Respawn packets with new status speed
+                        if (conn.packets) {
+                            conn.packets.forEach(p => {
+                                if (p.element.parentNode) p.element.parentNode.removeChild(p.element);
+                            });
+                        }
+                        conn.packets = [];
+                        if (conn.status !== 'down') {
+                            if (conn.flow === 'forward' || conn.flow === 'bidirectional') {
+                                spawnPacket(conn, 'forward');
+                            }
+                            if (conn.flow === 'reverse' || conn.flow === 'bidirectional') {
+                                spawnPacket(conn, 'reverse');
+                            }
+                        }
+                    }
                 });
             }, 10);
         }
@@ -1348,8 +1542,7 @@ function escapeXml(unsafe) {
 // Add styles
         svgStr += `<style>
             .connection { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
-            .connection.animated { stroke-dasharray: 10; }
-            .connection.animated-reverse { stroke-dasharray: 10; }
+
             .connection-hitarea { fill: none; stroke: transparent; stroke-width: 20; }
             .waypoint { fill: white; stroke: #007bff; stroke-width: 2; }
             .node-bg { stroke: #333; stroke-width: 2; rx: 8; ry: 8; }
