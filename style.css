@@ -319,6 +319,18 @@ body, html {
 }
 
 /* Packet Animation */
+.sequence-active {
+    stroke: #007bff !important;
+    stroke-width: 5px !important;
+    filter: drop-shadow(0 0 5px #007bff);
+}
+
+.sequence-packet {
+    fill: #007bff !important;
+    filter: drop-shadow(0 0 8px #007bff) !important;
+    r: 12px !important;
+}
+
 .packet {
     fill: #28a745;
     filter: drop-shadow(0 0 3px #28a745);

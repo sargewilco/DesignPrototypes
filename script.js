@@ -6,9 +6,11 @@ const colorPicker = document.getElementById('node-color');
     const nodePropertiesDiv = document.getElementById('node-properties');
     const connectionPropertiesDiv = document.getElementById('connection-properties');
     const connectionStatusSelect = document.getElementById('connection-status');
+    const connectionSequenceInput = document.getElementById('connection-sequence');
     const colorPresetsContainer = document.getElementById('color-presets');
     const networkTypeSelector = document.getElementById('network-type-selector');
 const paletteElementsContainer = document.getElementById('palette-elements');
+    const btnPlaySequence = document.getElementById('btn-play-sequence');
     const btnSave = document.getElementById('btn-save');
     const btnLoad = document.getElementById('btn-load');
     const loadFile = document.getElementById('load-file');
@@ -86,6 +88,13 @@ let nodes = {}; // Map of id -> { element, x, y, width, height }
     let connections = []; // Array of { sourceId, targetId, svgLine }
     let selectedNodeIds = [];
     let selectedConnectionId = null;
+
+    // Sequence State
+    let isPlayingSequence = false;
+    let sequenceSteps = [];
+    let currentSequenceStepIndex = -1;
+    let sequencePacket = null;
+    let currentSequenceNodeId = null;
 
     // Undo/Redo State
     let stateHistory = [];
@@ -216,6 +225,16 @@ const elementSets = {
                     console.log('Deleted node', id, node !== undefined); delete nodes[id];
                 });
                 deselectAllNodes();
+                saveState();
+            }
+        }
+    });
+
+    connectionSequenceInput.addEventListener('change', (e) => {
+        if (selectedConnectionId) {
+            const conn = connections.find(c => c.id === selectedConnectionId);
+            if (conn) {
+                conn.sequence = e.target.value;
                 saveState();
             }
         }
@@ -896,6 +915,7 @@ group.addEventListener('click', (e) => {
                 nodePropertiesDiv.style.display = 'none';
                 connectionPropertiesDiv.style.display = 'block';
                 connectionStatusSelect.value = connectionObj.status;
+                connectionSequenceInput.value = connectionObj.sequence || '';
             }
 
             if (e.detail === 2) {
@@ -1228,7 +1248,28 @@ conn.line1.setAttribute('d', path1D);
                 conn.textLabel.setAttribute('y', midY);
                 // Offset slightly so it's above the line if preferred, or centered. We'll do centered with stroke.
 
-                if (conn.packets && conn.packets.length > 0) {
+                // Place sequence packet
+                if (isPlayingSequence && sequencePacket && sequencePacket.conn === conn) {
+                    let pTargetLen = sequencePacket.position * totalLength;
+                    let pCurrentLen = 0;
+                    let pPos = { x: points[0].x, y: points[0].y };
+
+                    if (totalLength > 0) {
+                        for (let seg of segments) {
+                            if (pCurrentLen + seg.len >= pTargetLen) {
+                                const ratio = seg.len === 0 ? 0 : (pTargetLen - pCurrentLen) / seg.len;
+                                pPos.x = seg.p1.x + (seg.p2.x - seg.p1.x) * ratio;
+                                pPos.y = seg.p1.y + (seg.p2.y - seg.p1.y) * ratio;
+                                break;
+                            }
+                            pCurrentLen += seg.len;
+                        }
+                    }
+                    sequencePacket.element.setAttribute('cx', pPos.x);
+                    sequencePacket.element.setAttribute('cy', pPos.y);
+                }
+
+                if (conn.packets && conn.packets.length > 0 && !isPlayingSequence) {
                      conn.packets.forEach(packet => {
                         let pTargetLen = packet.position * totalLength;
                         let pCurrentLen = 0;
@@ -1282,7 +1323,40 @@ conn.line1.setAttribute('d', path1D);
 
     function animationLoop() {
         let hasChanges = false;
+
+        if (isPlayingSequence && sequencePacket) {
+            hasChanges = true;
+            const conn = sequencePacket.conn;
+            const pathLength = conn.hitArea.getTotalLength();
+            if (pathLength > 0) {
+                if (sequencePacket.direction === 'forward') {
+                    sequencePacket.position += sequencePacket.speed;
+                    if (sequencePacket.position >= 1) {
+                        sequencePacket.position = 1;
+                        if (sequencePacket.element.parentNode) {
+                            sequencePacket.element.parentNode.removeChild(sequencePacket.element);
+                        }
+                        sequencePacket = null;
+                        currentSequenceStepIndex++;
+                        setTimeout(startSequenceStep, 500);
+                    }
+                } else {
+                    sequencePacket.position -= sequencePacket.speed;
+                    if (sequencePacket.position <= 0) {
+                        sequencePacket.position = 0;
+                        if (sequencePacket.element.parentNode) {
+                            sequencePacket.element.parentNode.removeChild(sequencePacket.element);
+                        }
+                        sequencePacket = null;
+                        currentSequenceStepIndex++;
+                        setTimeout(startSequenceStep, 500);
+                    }
+                }
+            }
+        }
+
         connections.forEach(conn => {
+            if (isPlayingSequence) return;
             if (conn.status === 'down') return;
             if (!conn.packets || conn.packets.length === 0) return;
 
@@ -1329,6 +1403,7 @@ function getCurrentState() {
                 flow: c.flow,
                 label: c.label,
                 status: c.status,
+                sequence: c.sequence,
                 waypoints: c.waypoints.map(wp => ({ x: wp.x, y: wp.y }))
             }))
         };
@@ -1404,6 +1479,7 @@ function getCurrentState() {
                     const conn = createConnection(cData.sourceId, cData.targetId, cData.flow, cData.waypoints, cData.label);
                     if (conn) {
                         conn.status = cData.status || 'normal';
+                        conn.sequence = cData.sequence || '';
                         conn.svgGroup.dataset.status = conn.status;
 
                         // Respawn packets with new status speed
@@ -1473,6 +1549,142 @@ btnSave.addEventListener('click', () => {
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
     });
+
+    btnPlaySequence.addEventListener('click', () => {
+        if (isPlayingSequence) {
+            stopSequence();
+        } else {
+            playSequence();
+        }
+    });
+
+    function stopSequence() {
+        isPlayingSequence = false;
+        btnPlaySequence.textContent = 'Play Sequence';
+        btnPlaySequence.style.backgroundColor = '#28a745';
+        btnPlaySequence.style.borderColor = '#28a745';
+        if (sequencePacket && sequencePacket.element.parentNode) {
+            sequencePacket.element.parentNode.removeChild(sequencePacket.element);
+        }
+        sequencePacket = null;
+
+        // Remove highlights
+        connections.forEach(c => {
+            c.line1.classList.remove('sequence-active');
+            c.line2.classList.remove('sequence-active');
+            c.textLabel.classList.remove('sequence-active');
+        });
+
+        // Restore normal packets
+        connections.forEach(conn => {
+            if (conn.status !== 'down') {
+                if (conn.flow === 'forward' || conn.flow === 'bidirectional') {
+                    spawnPacket(conn, 'forward');
+                }
+                if (conn.flow === 'reverse' || conn.flow === 'bidirectional') {
+                    spawnPacket(conn, 'reverse');
+                }
+            }
+        });
+    }
+
+    function playSequence() {
+        // Collect all steps
+        sequenceSteps = [];
+        connections.forEach(conn => {
+            if (conn.sequence) {
+                const seqs = conn.sequence.split(',').map(s => s.trim());
+                seqs.forEach(s => {
+                    const num = parseInt(s);
+                    if (!isNaN(num)) {
+                        sequenceSteps.push({
+                            number: num,
+                            conn: conn
+                        });
+                    }
+                });
+            }
+        });
+
+        if (sequenceSteps.length === 0) {
+            alert("No sequences defined. Enter 'Sequence Order' in connection properties (e.g. 1 or 1,2).");
+            return;
+        }
+
+        sequenceSteps.sort((a, b) => a.number - b.number);
+
+        isPlayingSequence = true;
+        btnPlaySequence.textContent = 'Stop Sequence';
+        btnPlaySequence.style.backgroundColor = '#dc3545';
+        btnPlaySequence.style.borderColor = '#dc3545';
+
+        // Hide normal packets
+        connections.forEach(c => {
+            if (c.packets) {
+                c.packets.forEach(p => {
+                    if (p.element.parentNode) p.element.parentNode.removeChild(p.element);
+                });
+            }
+            c.packets = [];
+        });
+
+        currentSequenceStepIndex = 0;
+        currentSequenceNodeId = null; // We will figure this out as we go
+        startSequenceStep();
+    }
+
+    function startSequenceStep() {
+        if (!isPlayingSequence) return;
+
+        if (currentSequenceStepIndex >= sequenceSteps.length) {
+            // Sequence finished
+            setTimeout(() => {
+                alert("Sequence Complete");
+                stopSequence();
+            }, 500);
+            return;
+        }
+
+        const step = sequenceSteps[currentSequenceStepIndex];
+        const conn = step.conn;
+
+        // Remove highlights from all
+        connections.forEach(c => {
+            c.line1.classList.remove('sequence-active');
+            c.line2.classList.remove('sequence-active');
+            c.textLabel.classList.remove('sequence-active');
+        });
+
+        // Highlight active connection
+        conn.line1.classList.add('sequence-active');
+        conn.line2.classList.add('sequence-active');
+        conn.textLabel.classList.add('sequence-active');
+
+        // Determine flow direction based on previous node
+        let direction = 'forward';
+        if (currentSequenceNodeId === conn.targetId) {
+            direction = 'reverse';
+            currentSequenceNodeId = conn.sourceId; // Ends at source
+        } else {
+            // Either we are starting, or previous node is source
+            direction = 'forward';
+            currentSequenceNodeId = conn.targetId; // Ends at target
+        }
+
+        // Create packet
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('r', 8);
+        circle.classList.add('packet', 'sequence-packet');
+        conn.svgGroup.appendChild(circle);
+
+        sequencePacket = {
+            element: circle,
+            conn: conn,
+            position: direction === 'forward' ? 0 : 1,
+            direction: direction,
+            speed: 0.01 // Fixed sequence speed
+        };
+    }
 
     btnLoad.addEventListener('click', () => {
         loadFile.click();
