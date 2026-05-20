@@ -7,6 +7,7 @@ const colorPicker = document.getElementById('node-color');
     const connectionPropertiesDiv = document.getElementById('connection-properties');
     const connectionStatusSelect = document.getElementById('connection-status');
     const connectionSequenceInput = document.getElementById('connection-sequence');
+    const connectionFlowSelect = document.getElementById('connection-flow');
     const colorPresetsContainer = document.getElementById('color-presets');
     const networkTypeSelector = document.getElementById('network-type-selector');
 const paletteElementsContainer = document.getElementById('palette-elements');
@@ -235,6 +236,38 @@ const elementSets = {
             const conn = connections.find(c => c.id === selectedConnectionId);
             if (conn) {
                 conn.sequence = e.target.value;
+                saveState();
+            }
+        }
+    });
+
+    connectionFlowSelect.addEventListener('change', (e) => {
+        if (selectedConnectionId) {
+            const conn = connections.find(c => c.id === selectedConnectionId);
+            if (conn) {
+                conn.flow = e.target.value;
+                if (conn.flow === 'bidirectional') {
+                    conn.line2.style.display = '';
+                } else {
+                    conn.line2.style.display = 'none';
+                }
+
+                // clear and respawn packets on flow change
+                conn.packets.forEach(p => {
+                    if (p.element.parentNode) p.element.parentNode.removeChild(p.element);
+                });
+                conn.packets = [];
+
+                if (conn.status !== 'down') {
+                    if (conn.flow === 'forward' || conn.flow === 'bidirectional') {
+                        spawnPacket(conn, 'forward');
+                    }
+                    if (conn.flow === 'reverse' || conn.flow === 'bidirectional') {
+                        spawnPacket(conn, 'reverse');
+                    }
+                }
+
+                updateConnections();
                 saveState();
             }
         }
@@ -916,6 +949,7 @@ group.addEventListener('click', (e) => {
                 connectionPropertiesDiv.style.display = 'block';
                 connectionStatusSelect.value = connectionObj.status;
                 connectionSequenceInput.value = connectionObj.sequence || '';
+                connectionFlowSelect.value = connectionObj.flow;
             }
 
             if (e.detail === 2) {
@@ -1002,33 +1036,6 @@ circle.addEventListener('mousedown', (we) => {
                 return;
             }
 
-            if (connectionObj.flow === 'forward') {
-                connectionObj.flow = 'reverse';
-            } else if (connectionObj.flow === 'reverse') {
-                connectionObj.flow = 'bidirectional';
-                connectionObj.line2.style.display = '';
-            } else {
-                connectionObj.flow = 'forward';
-                connectionObj.line2.style.display = 'none';
-            }
-
-            // clear and respawn packets on flow change
-            connectionObj.packets.forEach(p => {
-                if (p.element.parentNode) p.element.parentNode.removeChild(p.element);
-            });
-            connectionObj.packets = [];
-
-            if (connectionObj.status !== 'down') {
-                if (connectionObj.flow === 'forward' || connectionObj.flow === 'bidirectional') {
-                    spawnPacket(connectionObj, 'forward');
-                }
-                if (connectionObj.flow === 'reverse' || connectionObj.flow === 'bidirectional') {
-                    spawnPacket(connectionObj, 'reverse');
-                }
-            }
-
-            updateConnections();
-            saveState();
         });
 
 group.addEventListener('dblclick', (e) => {

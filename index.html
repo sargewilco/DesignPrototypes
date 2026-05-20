@@ -34,7 +34,13 @@
             </div>
 
             <div class="property-group" id="connection-properties" style="display: none;">
-                <label>Connection Status:</label>
+                <label>Flow Direction:</label>
+                <select id="connection-flow" class="status-select">
+                    <option value="forward">➡️ Forward</option>
+                    <option value="reverse">⬅️ Reverse</option>
+                    <option value="bidirectional">↔️ Bidirectional</option>
+                </select>
+                <label style="margin-top: 10px; display: block; font-size: 0.9em;">Connection Status:</label>
                 <select id="connection-status" class="status-select">
                     <option value="normal">🟢 Normal</option>
                     <option value="congested">🟡 Congested</option>
@@ -43,7 +49,7 @@
                 <label style="margin-top: 10px; display: block; font-size: 0.9em;">Sequence Order:</label>
                 <input type="text" id="connection-sequence" class="status-select" placeholder="e.g. 1, 3" />
                 <div style="margin-top: 10px; font-size: 0.85em; color: #666;">
-                    Select a connection to change its traffic status.
+                    Select a connection to modify properties.
                 </div>
             </div>
 
