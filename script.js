@@ -1149,28 +1149,6 @@ const input = document.createElement('input');
     }
 
 
-
-    function updateNodeStatusHighlights() {
-        nodes.forEach(node => {
-            const nodeEl = document.getElementById(node.id);
-            if (!nodeEl) return;
-
-            let hasDown = false;
-            let hasCongested = false;
-
-            connections.forEach(conn => {
-                if (conn.sourceId === node.id || conn.targetId === node.id) {
-                    if (conn.status === 'down') hasDown = true;
-                    else if (conn.status === 'congested') hasCongested = true;
-                }
-            });
-
-            if (hasDown) { nodeEl.classList.add('node-down'); nodeEl.classList.remove('node-congested'); }
-            else if (hasCongested) { nodeEl.classList.add('node-congested'); nodeEl.classList.remove('node-down'); }
-            else { nodeEl.classList.remove('node-down', 'node-congested'); }
-        });
-    }
-
     function updateConnections() {
         connections.forEach(conn => {
             const source = nodes[conn.sourceId];
