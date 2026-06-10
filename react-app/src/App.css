@@ -71,6 +71,13 @@ body, html {
     margin-top: 5px;
 }
 
+.template-hint {
+    font-size: 0.78em;
+    color: #777;
+    margin-top: 4px;
+    font-style: italic;
+}
+
 .validation-ok {
     color: #28a745;
     font-size: 0.9em;
