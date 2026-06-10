@@ -4,6 +4,7 @@ import { buildGeometry, connectionPoints } from '../utils/geometry';
 const Connection = ({
   conn,
   nodes,
+  invalid,
   selected,
   paused,
   onSelect,
@@ -99,17 +100,18 @@ const Connection = ({
         onDelete(conn.id);
       }}
     >
+      {invalid && <title>Invalid link: no reference point between these node types</title>}
       <path className="connection-hitarea" d={hit} />
       <path
         ref={line1Ref}
-        className={`connection ${selected ? 'sel' : ''}`}
+        className={`connection ${selected ? 'sel' : ''} ${invalid ? 'invalid' : ''}`}
         d={d1}
         style={strokeStyle}
       />
       {isBidi && (
         <path
           ref={line2Ref}
-          className={`connection ${selected ? 'sel' : ''}`}
+          className={`connection ${selected ? 'sel' : ''} ${invalid ? 'invalid' : ''}`}
           d={d2}
           style={strokeStyle}
         />

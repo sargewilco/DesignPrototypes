@@ -4,6 +4,7 @@ import { DiagramProvider } from './context/DiagramContext';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import Toolbar from './components/Toolbar';
+import ValidationPanel from './components/ValidationPanel';
 import Canvas from './components/Canvas';
 
 function App() {
@@ -16,6 +17,8 @@ function App() {
           <Sidebar />
           <hr className="panel-divider" />
           <PropertiesPanel />
+          <hr className="panel-divider" />
+          <ValidationPanel />
           <hr className="panel-divider" />
           <Toolbar playing={playing} onTogglePlay={() => setPlaying((p) => !p)} />
         </div>

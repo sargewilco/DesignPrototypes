@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useDiagram } from '../context/DiagramContext';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
 import { snapToGrid } from '../utils/geometry';
+import { getReferenceLabel, isValidConnection } from '../network/topology';
 import Node from './Node';
 import Connection from './Connection';
 import Minimap from './Minimap';
@@ -39,6 +40,9 @@ const Canvas = ({ playing, onSequenceEnd }) => {
   }, []);
 
   const createConnection = useCallback((sourceId, targetId) => {
+    const s = stateRef.current.nodes[sourceId];
+    const t = stateRef.current.nodes[targetId];
+    const label = s && t ? getReferenceLabel(s.type, t.type) : '';
     dispatch({
       type: 'ADD_CONNECTION',
       payload: {
@@ -47,7 +51,7 @@ const Canvas = ({ playing, onSequenceEnd }) => {
         targetId,
         flow: 'forward',
         status: 'normal',
-        label: '',
+        label,
         sequence: '',
         waypoints: [],
       },
@@ -439,11 +443,16 @@ const Canvas = ({ playing, onSequenceEnd }) => {
       }}
     >
       <svg ref={svgRef} className="connection-layer" style={{ transform }}>
-        {connections.map((conn) => (
+        {connections.map((conn) => {
+          const s = nodes[conn.sourceId];
+          const t = nodes[conn.targetId];
+          const invalid = s && t ? !isValidConnection(s.type, t.type) : false;
+          return (
           <Connection
             key={conn.id}
             conn={conn}
             nodes={nodes}
+            invalid={invalid}
             selected={conn.id === selectedConnectionId}
             paused={playing}
             onSelect={(id) => dispatch({ type: 'SELECT_CONNECTION', payload: id })}
@@ -454,7 +463,8 @@ const Canvas = ({ playing, onSequenceEnd }) => {
               setLabelEditor({ connId: c.id, x: mid.x, y: mid.y, value: c.label || '' })
             }
           />
-        ))}
+          );
+        })}
         <circle ref={seqPacketRef} className="packet" r={8} style={{ display: 'none' }} />
       </svg>
 
