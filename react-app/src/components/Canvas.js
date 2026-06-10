@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useDiagram } from '../context/DiagramContext';
+import { useSimulation } from '../context/SimulationContext';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
 import { snapToGrid } from '../utils/geometry';
 import { getReferenceLabel, isValidConnection } from '../network/topology';
@@ -13,12 +14,14 @@ const newNodeId = () => `node_${Date.now()}_${nodeCounter++}`;
 
 const Canvas = ({ playing, onSequenceEnd }) => {
   const { state, dispatch } = useDiagram();
+  const simulation = useSimulation();
   const { nodes, connections, selectedNodeIds, selectedConnectionId, scale, panX, panY, networkSet } = state;
 
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const svgRef = useRef(null);
   const seqPacketRef = useRef(null);
+  const scenarioPacketRef = useRef(null);
 
   // Latest view transform, for use inside imperative event handlers.
   const viewRef = useRef({ scale, panX, panY });
@@ -423,8 +426,67 @@ const Canvas = ({ playing, onSequenceEnd }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
+  // --- Scenario step animation (explicit from/to, correct direction) ---
+  const { scenario, stepIndex } = simulation;
+  useEffect(() => {
+    const packet = scenarioPacketRef.current;
+    const clearHighlights = () => {
+      if (containerRef.current) {
+        containerRef.current
+          .querySelectorAll('.sequence-active')
+          .forEach((el) => el.classList.remove('sequence-active'));
+      }
+    };
+    clearHighlights();
+    if (packet) packet.style.display = 'none';
+
+    if (!scenario || stepIndex < 0 || stepIndex >= scenario.steps.length) {
+      return undefined;
+    }
+    const step = scenario.steps[stepIndex];
+    const conn = stateRef.current.connections.find(
+      (c) =>
+        (c.sourceId === step.from && c.targetId === step.to) ||
+        (c.sourceId === step.to && c.targetId === step.from)
+    );
+    if (!conn) return undefined;
+
+    const grp = containerRef.current.querySelector(`[data-conn-id="${conn.id}"]`);
+    const path = grp ? grp.querySelector('.connection') : null;
+    if (grp) {
+      grp
+        .querySelectorAll('.connection, .connection-label')
+        .forEach((el) => el.classList.add('sequence-active'));
+    }
+
+    const forward = conn.sourceId === step.from; // animate 0->1 if 'from' is the source
+    const duration = 1000;
+    let raf;
+    let start;
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      const pos = forward ? p : 1 - p;
+      if (path && packet) {
+        const len = path.getTotalLength();
+        if (len > 0) {
+          const pt = path.getPointAtLength(pos * len);
+          packet.setAttribute('cx', pt.x);
+          packet.setAttribute('cy', pt.y);
+          packet.style.display = '';
+        }
+      }
+      if (p < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearHighlights();
+    };
+  }, [scenario, stepIndex]);
+
   const transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-  const showRadial = selectedNodeIds.length === 1 && !dragging && !playing;
+  const showRadial = selectedNodeIds.length === 1 && !dragging && !playing && !simulation.scenarioActive;
   const radialNode = showRadial ? nodes[selectedNodeIds[0]] : null;
 
   return (
@@ -454,7 +516,7 @@ const Canvas = ({ playing, onSequenceEnd }) => {
             nodes={nodes}
             invalid={invalid}
             selected={conn.id === selectedConnectionId}
-            paused={playing}
+            paused={playing || simulation.scenarioActive}
             onSelect={(id) => dispatch({ type: 'SELECT_CONNECTION', payload: id })}
             onAddWaypoint={handleAddWaypoint}
             onWaypointMouseDown={handleWaypointMouseDown}
@@ -466,6 +528,12 @@ const Canvas = ({ playing, onSequenceEnd }) => {
           );
         })}
         <circle ref={seqPacketRef} className="packet" r={8} style={{ display: 'none' }} />
+        <circle
+          ref={scenarioPacketRef}
+          className="packet sequence-packet"
+          r={9}
+          style={{ display: 'none' }}
+        />
       </svg>
 
       <div ref={canvasRef} className="canvas" style={{ transform }}>

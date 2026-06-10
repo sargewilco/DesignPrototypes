@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { useDiagram } from '../context/DiagramContext';
 import { elementSets, networkTypeOptions } from '../constants';
-import { templates, flows } from '../network/topology';
+import { templates } from '../network/topology';
+import { scenarios } from '../network/scenarios';
+import { useSimulation } from '../context/SimulationContext';
 
 const Sidebar = () => {
   const { state, dispatch } = useDiagram();
+  const { loadScenario } = useSimulation();
   const items = elementSets[state.networkSet] || [];
   const [templateKey, setTemplateKey] = useState(templates[0].key);
-  const [flowKey, setFlowKey] = useState(flows[0].key);
+  const [scenarioKey, setScenarioKey] = useState(scenarios[0].key);
 
   const handleDragStart = (e, type) => {
     e.dataTransfer.setData('text/plain', type);
@@ -26,10 +29,10 @@ const Sidebar = () => {
     dispatch({ type: 'LOAD_STATE', payload: tpl.build() });
   };
 
-  const loadFlow = () => {
-    const flow = flows.find((f) => f.key === flowKey);
-    if (!flow || !confirmReplace()) return;
-    dispatch({ type: 'LOAD_STATE', payload: flow.build() });
+  const startScenario = () => {
+    const sc = scenarios.find((s) => s.key === scenarioKey);
+    if (!sc || !confirmReplace()) return;
+    loadScenario(sc);
   };
 
   return (
@@ -75,22 +78,22 @@ const Sidebar = () => {
         Load Template
       </button>
 
-      <label className="template-label">Sample 5G SA flows:</label>
+      <label className="template-label">Sample 5G SA scenarios:</label>
       <select
         className="network-selector"
-        value={flowKey}
-        onChange={(e) => setFlowKey(e.target.value)}
+        value={scenarioKey}
+        onChange={(e) => setScenarioKey(e.target.value)}
       >
-        {flows.map((f) => (
-          <option key={f.key} value={f.key}>
-            {f.name}
+        {scenarios.map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.name}
           </option>
         ))}
       </select>
-      <button className="tool-btn" onClick={loadFlow}>
-        Load Flow
+      <button className="tool-btn" onClick={startScenario}>
+        Load Scenario
       </button>
-      <div className="template-hint">Then press “Play Sequence” to step through it.</div>
+      <div className="template-hint">Step through it with the flow controls at the bottom.</div>
     </div>
   );
 };

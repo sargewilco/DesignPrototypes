@@ -157,10 +157,9 @@ export const templates = [
   },
 ];
 
-// --- Sample 5G SA flows -----------------------------------------------------
-// All flows share one 5G SA topology; each only differs in which links carry
-// sequence numbers. Load a flow, then press "Play Sequence" to step through it.
-// Sequences are forward chains so the animation direction reads correctly.
+// --- 5G SA flow base topology ----------------------------------------------
+// Shared 5G SA topology that the scenario engine (src/network/scenarios.js)
+// animates step-by-step. Node ids here are referenced by scenario steps.
 
 const FLOW_NODES = [
   { id: 'ue', type: 'UE', x: 100, y: 300 },
@@ -186,49 +185,7 @@ const FLOW_EDGES = [
   ['upf', 'internet'],
 ];
 
-// seq maps "srcId-tgtId" (matching FLOW_EDGES order) -> sequence string.
-function buildFlow(seq) {
-  const tpl = buildTemplate(FLOW_NODES, FLOW_EDGES);
-  tpl.connections = tpl.connections.map((c, i) => {
-    const key = `${FLOW_EDGES[i][0]}-${FLOW_EDGES[i][1]}`;
-    return seq[key] ? { ...c, sequence: seq[key] } : c;
-  });
-  return tpl;
+// Builds the shared 5G SA topology (LOAD_STATE-shaped) used by scenarios.
+export function build5gsaFlowTopology() {
+  return buildTemplate(FLOW_NODES, FLOW_EDGES);
 }
-
-export const flows = [
-  {
-    key: 'registration',
-    name: 'UE Registration (CP)',
-    build: () =>
-      buildFlow({
-        'ue-gnb': '1', // RRC + Registration Request
-        'gnb-amf': '2', // N2: NAS to AMF
-        'amf-udm': '3', // N8: authentication / subscription
-        'amf-pcf': '4', // N15: AM policy association
-      }),
-  },
-  {
-    key: 'pdu-session',
-    name: 'PDU Session Setup (CP)',
-    build: () =>
-      buildFlow({
-        'ue-gnb': '1', // PDU Session Establishment Request
-        'gnb-amf': '2', // N2 to AMF
-        'amf-smf': '3', // N11: create SM context
-        'smf-udm': '4', // N10: session management subscription
-        'smf-pcf': '5', // N7: SM policy association
-        'smf-upf': '6', // N4: UPF session establishment
-      }),
-  },
-  {
-    key: 'user-plane',
-    name: 'User-Plane Data (UP)',
-    build: () =>
-      buildFlow({
-        'ue-gnb': '1', // uplink data over the air
-        'gnb-upf': '2', // N3: GTP-U to UPF
-        'upf-internet': '3', // N6: out to the data network
-      }),
-  },
-];
