@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx react-scripts *)",
+      "Bash(BROWSER=none PORT=3000 npm start)",
+      "Bash(echo \"started, pid $!\")",
+      "Read(//c/c/Users/commw/NetworkDesignVisualizer/DesignPrototypes/**)",
+      "Bash(node -e \"console.log\\(require.resolve\\('playwright'\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(npx playwright *)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('sdk', p.dependencies['@anthropic-ai/sdk']\\); console.log\\('express', p.dependencies.express\\); console.log\\('concurrently', p.dependencies.concurrently\\)\")",
+      "Bash(node --check server/index.js)",
+      "Bash(echo \"pw exit=$?\")",
+      "Bash(node server/index.js)",
+      "Bash(echo \"proxy pid $!\")",
+      "Bash(curl -s http://localhost:8787/api/health)",
+      "Bash(echo \"direct 8787 health: $\\(curl -s http://localhost:8787/api/health || echo FAILED\\)\")",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(echo \"via CRA 3000 health: $\\(curl -s http://localhost:3000/api/health || echo FAILED\\)\")",
+      "Bash(node -e \"console.log\\(require.resolve\\('http-proxy-middleware'\\)\\)\")",
+      "Bash(echo \"=== direct 8787 ===\"; curl -s http://localhost:8787/api/health || echo \"8787 DOWN\" *)",
+      "Bash(node verify_ai.js)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force; \"killed PID $_ on 8787\" } catch {} })",
+      "Bash(npm uninstall *)",
+      "Bash(echo \"pw uninstall exit=$?\")"
+    ]
+  }
+}
