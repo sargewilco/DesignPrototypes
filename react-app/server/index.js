@@ -24,9 +24,14 @@ const client = hasKey ? new Anthropic() : null;
 // can't render. The client re-derives reference-point labels and validity from
 // src/network/topology.js, so this list only needs to stay roughly in sync.
 const NODE_TYPES = [
-  'Router', 'Switch', 'Server', 'Client', 'Internet',
-  'UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS',
-  'gNodeB', 'AMF', 'SMF', 'UPF', 'PCF', 'UDM', 'UDR', 'NSSF', 'NEF', 'AF',
+  // Generic IT / enterprise
+  'Router', 'Switch', 'Server', 'Client', 'Firewall',
+  'Load Balancer', 'Database', 'Access Point', 'Cloud', 'Internet',
+  // 4G / EPC
+  'UE', 'eNodeB', 'MME', 'SGW', 'PGW', 'HSS', 'PCRF', 'OCS', 'ePDG',
+  // 5G SA
+  'gNodeB', 'AMF', 'SMF', 'UPF', 'AUSF', 'NRF',
+  'PCF', 'UDM', 'UDR', 'NSSF', 'NEF', 'AF', 'CHF', 'SMSF',
 ];
 
 const diagramSchema = {
@@ -67,16 +72,16 @@ const diagramSchema = {
 const SYSTEM_PROMPT = `You generate network topology diagrams as JSON for a network design tool. Output only an object with "nodes" and "connections" matching the provided schema — no prose.
 
 Node types you may use:
-- Generic IT: Router, Switch, Server, Client, Internet
-- 4G / EPC (3GPP LTE): UE, eNodeB, MME, SGW, PGW, HSS, Internet
-- 5G SA: UE, gNodeB, AMF, SMF, UPF, PCF, UDM, UDR, NSSF, NEF, AF, Internet
+- Generic IT / enterprise: Router, Switch, Server, Client, Firewall, Load Balancer, Database, Access Point, Cloud, Internet
+- 4G / EPC (3GPP LTE): UE, eNodeB, MME, SGW, PGW, HSS, PCRF, OCS, ePDG, Internet
+- 5G SA: UE, gNodeB, AMF, SMF, UPF, AUSF, NRF, PCF, UDM, UDR, NSSF, NEF, AF, CHF, SMSF, Internet
 
 Each node needs a unique short id (e.g. "amf", "gnb1"), a type from the list, a human label (usually the type name), and x/y canvas coordinates.
 
 Connections reference node ids (sourceId, targetId). Only connect nodes that have a real adjacency:
-- 5G SA reference points: UE-gNodeB, UE-AMF, gNodeB-AMF, gNodeB-UPF, SMF-UPF, AMF-SMF, AMF-UDM, SMF-UDM, SMF-PCF, AMF-PCF, AMF-NSSF, UDM-UDR, PCF-UDR, AF-NEF, AF-PCF, UPF-Internet.
-- EPC reference points: UE-eNodeB, eNodeB-MME, eNodeB-SGW, MME-SGW, MME-HSS, SGW-PGW, PGW-Internet.
-- Generic IT: connect sensibly (Client-Switch, Switch-Router, Router-Server, Router-Internet).
+- 5G SA reference points: UE-gNodeB, UE-AMF, gNodeB-AMF, gNodeB-UPF, SMF-UPF, AMF-SMF, AMF-UDM, SMF-UDM, SMF-PCF, AMF-PCF, AMF-NSSF, UDM-UDR, PCF-UDR, AF-NEF, AF-PCF, UPF-Internet, AMF-AUSF, AUSF-UDM, SMF-CHF, PCF-CHF, AMF-SMSF, SMSF-UDM. NRF is service discovery and may connect to any control-plane NF (AMF, SMF, AUSF, UDM, PCF, NSSF, NEF, CHF, SMSF).
+- EPC reference points: UE-eNodeB, eNodeB-MME, eNodeB-SGW, MME-SGW, MME-HSS, SGW-PGW, PGW-Internet, PGW-PCRF, PCRF-AF, PCRF-OCS, PGW-OCS, PGW-ePDG, UE-ePDG.
+- Generic IT: connect sensibly (Client-Switch, Switch-Router, Router-Firewall, Firewall-Internet, Load Balancer-Server, Server-Database, Access Point-Switch). Firewall, Load Balancer, Database, Access Point, and Cloud can connect to anything reasonable.
 
 Layout: place nodes left-to-right by role. Access/RAN on the left, control-plane functions in the middle, user-plane (UPF/SGW/PGW) lower, and the data network/Internet toward the right or bottom. Space nodes about 180px apart horizontally and 150px vertically, with coordinates roughly in x: 80-1000, y: 80-700.
 

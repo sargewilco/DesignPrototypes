@@ -9,6 +9,11 @@ export const PERMISSIVE_TYPES = new Set([
   'Server',
   'Client',
   'Internet',
+  'Firewall',
+  'Load Balancer',
+  'Database',
+  'Access Point',
+  'Cloud',
 ]);
 
 // [typeA, typeB, referencePointLabel]
@@ -32,7 +37,24 @@ const REF_DEFS = [
   ['AF', 'NEF', 'N33'],
   ['AF', 'PCF', 'N5'],
   ['UPF', 'Internet', 'N6'],
-  // --- EPC / 3GPP LTE (TS 23.401) ---
+  // 5G SA control-plane additions: auth, charging, SMS
+  ['AMF', 'AUSF', 'N12'],
+  ['AUSF', 'UDM', 'N13'],
+  ['SMF', 'CHF', 'N40'],
+  ['PCF', 'CHF', 'N28'],
+  ['AMF', 'SMSF', 'N20'],
+  ['SMSF', 'UDM', 'N21'],
+  // NRF service discovery (Nnrf) — reachable from the core NFs
+  ['NRF', 'AMF', 'Nnrf'],
+  ['NRF', 'SMF', 'Nnrf'],
+  ['NRF', 'AUSF', 'Nnrf'],
+  ['NRF', 'UDM', 'Nnrf'],
+  ['NRF', 'PCF', 'Nnrf'],
+  ['NRF', 'NSSF', 'Nnrf'],
+  ['NRF', 'NEF', 'Nnrf'],
+  ['NRF', 'CHF', 'Nnrf'],
+  ['NRF', 'SMSF', 'Nnrf'],
+  // --- EPC / 3GPP LTE (TS 23.401 / 23.402) ---
   ['UE', 'eNodeB', 'LTE-Uu'],
   ['eNodeB', 'MME', 'S1-MME'],
   ['eNodeB', 'SGW', 'S1-U'],
@@ -40,6 +62,14 @@ const REF_DEFS = [
   ['MME', 'HSS', 'S6a'],
   ['SGW', 'PGW', 'S5/S8'],
   ['PGW', 'Internet', 'SGi'],
+  // EPC policy & charging
+  ['PGW', 'PCRF', 'Gx'],
+  ['PCRF', 'AF', 'Rx'],
+  ['PCRF', 'OCS', 'Sy'],
+  ['PGW', 'OCS', 'Gy'],
+  // EPC untrusted non-3GPP (ePDG)
+  ['PGW', 'ePDG', 'S2b'],
+  ['UE', 'ePDG', 'SWu'],
 ];
 
 const pairKey = (a, b) => [a, b].sort().join('|');
