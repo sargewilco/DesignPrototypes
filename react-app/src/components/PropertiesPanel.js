@@ -1,6 +1,12 @@
 import React from 'react';
 import { useDiagram } from '../context/DiagramContext';
-import { presetColors, flowOptions, statusOptions } from '../constants';
+import {
+  presetColors,
+  flowOptions,
+  statusOptions,
+  loadBalancerAlgorithms,
+  DEFAULT_LB_ALGORITHM,
+} from '../constants';
 
 const PropertiesPanel = () => {
   const { state, dispatch } = useDiagram();
@@ -21,6 +27,17 @@ const PropertiesPanel = () => {
   const updateConnection = (changes) => {
     if (!selectedConnection) return;
     dispatch({ type: 'UPDATE_CONNECTION', payload: { id: selectedConnection.id, changes } });
+  };
+
+  // Load Balancer algorithm — shown when one or more selected nodes are LBs.
+  const lbIds = selectedNodeIds.filter(
+    (id) => nodes[id] && nodes[id].type === 'Load Balancer'
+  );
+  const lbAlgorithm =
+    lbIds.length > 0 ? nodes[lbIds[0]].algorithm || DEFAULT_LB_ALGORITHM : DEFAULT_LB_ALGORITHM;
+  const setAlgorithm = (algorithm) => {
+    if (lbIds.length === 0) return;
+    dispatch({ type: 'SET_NODE_ALGORITHM', payload: { ids: lbIds, algorithm } });
   };
 
   return (
@@ -66,6 +83,20 @@ const PropertiesPanel = () => {
         </div>
       ) : (
         <div className="property-group">
+          {lbIds.length > 0 && (
+            <div style={{ marginBottom: 15 }}>
+              <label>Load Balancing Algorithm:</label>
+              <select
+                className="status-select"
+                value={lbAlgorithm}
+                onChange={(e) => setAlgorithm(e.target.value)}
+              >
+                {loadBalancerAlgorithms.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <label>Background Color:</label>
           <div className={`color-presets ${hasNodeSelection ? '' : 'disabled'}`}>
             {presetColors.map((color) => (

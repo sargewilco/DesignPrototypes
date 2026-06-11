@@ -49,6 +49,7 @@ export function generateSVGString(nodes, connections) {
     .connection { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
     .node-bg { stroke: #333; stroke-width: 2; rx: 8; ry: 8; }
     .node-text { font-family: sans-serif; font-size: 16px; text-anchor: middle; dominant-baseline: middle; }
+    .node-subtext { font-family: sans-serif; font-size: 11px; text-anchor: middle; dominant-baseline: middle; opacity: 0.7; }
     .connection-label { font-family: sans-serif; font-size: 14px; font-weight: bold; fill: #333; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: white; stroke-width: 4px; }
   </style>`;
 
@@ -69,8 +70,13 @@ export function generateSVGString(nodes, connections) {
   allNodes.forEach((n) => {
     const fg = getContrastYIQ(n.color);
     const c = nodeCenter(n);
+    const isLB = n.type === 'Load Balancer' && n.algorithm;
+    const labelY = isLB ? c.y - 7 : c.y;
     svg += `<rect class="node-bg" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${n.color || '#ffffff'}" />`;
-    svg += `<text class="node-text" x="${c.x}" y="${c.y}" fill="${fg}">${escapeXml(n.label)}</text>`;
+    svg += `<text class="node-text" x="${c.x}" y="${labelY}" fill="${fg}">${escapeXml(n.label)}</text>`;
+    if (isLB) {
+      svg += `<text class="node-subtext" x="${c.x}" y="${c.y + 9}" fill="${fg}">${escapeXml(n.algorithm)}</text>`;
+    }
   });
   svg += '</g></svg>';
 

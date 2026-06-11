@@ -17,7 +17,7 @@ const Node = ({ node, scale, selected, onMouseDown }) => {
     if (Math.abs(width - node.width) > 0.5 || Math.abs(height - node.height) > 0.5) {
       dispatch({ type: 'SET_NODE_SIZE', payload: { id: node.id, width, height } });
     }
-  }, [node.label, node.id, node.width, node.height, scale, dispatch]);
+  }, [node.label, node.id, node.width, node.height, node.algorithm, scale, dispatch]);
 
   const startEditing = (e) => {
     e.stopPropagation();
@@ -65,7 +65,10 @@ const Node = ({ node, scale, selected, onMouseDown }) => {
           }}
         />
       ) : (
-        node.label
+        <span>{node.label}</span>
+      )}
+      {node.type === 'Load Balancer' && (
+        <div className="node-sublabel">{node.algorithm || 'Round Robin'}</div>
       )}
     </div>
   );

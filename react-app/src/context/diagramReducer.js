@@ -1,4 +1,4 @@
-import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, DEFAULT_LB_ALGORITHM } from '../constants';
 
 export const initialState = {
   networkSet: 'standard',
@@ -115,6 +115,15 @@ const diagramReducer = (state, action) => {
       return { ...state, ...pushHistory(state), nodes };
     }
 
+    case 'SET_NODE_ALGORITHM': {
+      const ids = new Set(action.payload.ids);
+      const nodes = { ...state.nodes };
+      ids.forEach((id) => {
+        if (nodes[id]) nodes[id] = { ...nodes[id], algorithm: action.payload.algorithm };
+      });
+      return { ...state, ...pushHistory(state), nodes };
+    }
+
     case 'LOAD_STATE': {
       const data = action.payload;
       const nodes = {};
@@ -128,6 +137,8 @@ const diagramReducer = (state, action) => {
           width: n.width || DEFAULT_NODE_WIDTH,
           height: n.height || DEFAULT_NODE_HEIGHT,
           color: n.color || '#ffffff',
+          algorithm:
+            n.type === 'Load Balancer' ? n.algorithm || DEFAULT_LB_ALGORITHM : n.algorithm,
         };
       });
       const connections = (data.connections || []).map((c, i) => ({

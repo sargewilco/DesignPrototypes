@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useDiagram } from '../context/DiagramContext';
 import { useSimulation } from '../context/SimulationContext';
-import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, DEFAULT_LB_ALGORITHM } from '../constants';
 import { snapToGrid } from '../utils/geometry';
 import { getReferenceLabel, isValidConnection } from '../network/topology';
 import Node from './Node';
@@ -80,6 +80,7 @@ const Canvas = ({ playing, onSequenceEnd }) => {
         width: DEFAULT_NODE_WIDTH,
         height: DEFAULT_NODE_HEIGHT,
         color: '#ffffff',
+        algorithm: type === 'Load Balancer' ? DEFAULT_LB_ALGORITHM : undefined,
       },
     });
   };
@@ -301,7 +302,17 @@ const Canvas = ({ playing, onSequenceEnd }) => {
     const id = newNodeId();
     dispatch({
       type: 'ADD_NODE',
-      payload: { id, type, label: type, x, y, width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT, color: '#ffffff' },
+      payload: {
+        id,
+        type,
+        label: type,
+        x,
+        y,
+        width: DEFAULT_NODE_WIDTH,
+        height: DEFAULT_NODE_HEIGHT,
+        color: '#ffffff',
+        algorithm: type === 'Load Balancer' ? DEFAULT_LB_ALGORITHM : undefined,
+      },
     });
     createConnection(sourceId, id);
     dispatch({ type: 'SET_SELECTED_NODES', payload: [id] });

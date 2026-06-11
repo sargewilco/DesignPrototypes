@@ -25,6 +25,18 @@ export const networkTypeOptions = [
   { value: '5gsa', label: '5G SA Mobile' },
 ];
 
+// Load balancing algorithms selectable on a Load Balancer node.
+export const loadBalancerAlgorithms = [
+  'Round Robin',
+  'Weighted Round Robin',
+  'Least Connections',
+  'Least Response Time',
+  'IP Hash',
+  'Random',
+];
+
+export const DEFAULT_LB_ALGORITHM = 'Round Robin';
+
 export const presetColors = [
   '#ffffff', // White
   '#f8d7da', // Pastel Red
