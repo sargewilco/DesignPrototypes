@@ -193,13 +193,15 @@ export const templates = [
 
 const FLOW_NODES = [
   { id: 'ue', type: 'UE', x: 100, y: 300 },
-  { id: 'gnb', type: 'gNodeB', x: 280, y: 300 },
-  { id: 'amf', type: 'AMF', x: 480, y: 140 },
-  { id: 'smf', type: 'SMF', x: 480, y: 300 },
-  { id: 'upf', type: 'UPF', x: 480, y: 460 },
-  { id: 'udm', type: 'UDM', x: 700, y: 140 },
-  { id: 'pcf', type: 'PCF', x: 700, y: 300 },
-  { id: 'internet', type: 'Internet', x: 480, y: 620 },
+  { id: 'gnb', type: 'gNodeB', x: 300, y: 300 },
+  { id: 'amf', type: 'AMF', x: 500, y: 140 },
+  { id: 'smf', type: 'SMF', x: 500, y: 300 },
+  { id: 'upf', type: 'UPF', x: 500, y: 460 },
+  { id: 'ausf', type: 'AUSF', x: 720, y: 40 },
+  { id: 'udm', type: 'UDM', x: 720, y: 160 },
+  { id: 'pcf', type: 'PCF', x: 720, y: 300 },
+  { id: 'chf', type: 'CHF', x: 720, y: 440 },
+  { id: 'internet', type: 'Internet', x: 500, y: 620 },
 ];
 
 const FLOW_EDGES = [
@@ -208,10 +210,13 @@ const FLOW_EDGES = [
   ['gnb', 'upf'],
   ['amf', 'smf'],
   ['smf', 'upf'],
+  ['amf', 'ausf'],
+  ['ausf', 'udm'],
   ['amf', 'udm'],
   ['smf', 'udm'],
   ['amf', 'pcf'],
   ['smf', 'pcf'],
+  ['smf', 'chf'],
   ['upf', 'internet'],
 ];
 
