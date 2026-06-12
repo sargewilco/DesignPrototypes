@@ -199,6 +199,63 @@ body, html {
     margin-top: 5px;
 }
 
+.trace-hint {
+    font-size: 0.85em;
+    color: #777;
+}
+
+.trace-log {
+    margin-top: 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+
+.trace-log-step {
+    padding: 5px 7px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    font-size: 0.8em;
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    grid-template-areas: "num hop" "num msg";
+    column-gap: 6px;
+}
+
+.trace-log-step:last-child {
+    border-bottom: none;
+}
+
+.trace-log-step:hover {
+    background: #f5f8ff;
+}
+
+.trace-log-step.active {
+    background: #e6efff;
+}
+
+.trace-log-num {
+    grid-area: num;
+    color: #999;
+    align-self: center;
+}
+
+.trace-log-hop {
+    grid-area: hop;
+    font-weight: bold;
+    color: #333;
+}
+
+.trace-log-step.active .trace-log-hop {
+    color: #007bff;
+}
+
+.trace-log-msg {
+    grid-area: msg;
+    color: #666;
+}
+
 .template-hint {
     font-size: 0.78em;
     color: #777;

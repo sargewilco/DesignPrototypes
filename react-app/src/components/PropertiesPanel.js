@@ -40,6 +40,17 @@ const PropertiesPanel = () => {
     dispatch({ type: 'SET_NODE_ALGORITHM', payload: { ids: lbIds, algorithm } });
   };
 
+  // If the selected connection is an LB backend edge, expose per-backend params.
+  const lbEdgeNode = selectedConnection
+    ? [selectedConnection.sourceId, selectedConnection.targetId]
+        .map((id) => nodes[id])
+        .find((n) => n && n.type === 'Load Balancer') || null
+    : null;
+  const numChange = (field) => (e) => {
+    const v = e.target.value;
+    updateConnection({ [field]: v === '' ? undefined : Number(v) });
+  };
+
   return (
     <div className="sidebar-section">
       <h2>Properties</h2>
@@ -80,6 +91,46 @@ const PropertiesPanel = () => {
             value={selectedConnection.sequence || ''}
             onChange={(e) => updateConnection({ sequence: e.target.value })}
           />
+
+          {lbEdgeNode && (
+            <>
+              <hr className="panel-divider" />
+              <div style={{ fontSize: '0.85em', color: '#555', marginBottom: 6 }}>
+                Backend of {lbEdgeNode.label} ({lbEdgeNode.algorithm || 'Round Robin'})
+              </div>
+              <label style={{ display: 'block', fontSize: '0.9em' }}>Weight (Weighted RR):</label>
+              <input
+                type="number"
+                min="1"
+                className="status-select"
+                placeholder="1"
+                value={selectedConnection.weight ?? ''}
+                onChange={numChange('weight')}
+              />
+              <label style={{ marginTop: 8, display: 'block', fontSize: '0.9em' }}>
+                Active connections (Least Conn):
+              </label>
+              <input
+                type="number"
+                min="0"
+                className="status-select"
+                placeholder="0"
+                value={selectedConnection.activeConnections ?? ''}
+                onChange={numChange('activeConnections')}
+              />
+              <label style={{ marginTop: 8, display: 'block', fontSize: '0.9em' }}>
+                Response time ms (Least RT):
+              </label>
+              <input
+                type="number"
+                min="0"
+                className="status-select"
+                placeholder="0"
+                value={selectedConnection.responseTime ?? ''}
+                onChange={numChange('responseTime')}
+              />
+            </>
+          )}
         </div>
       ) : (
         <div className="property-group">

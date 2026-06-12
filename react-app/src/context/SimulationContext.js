@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { useDiagram } from './DiagramContext';
+import { buildTrace } from '../network/trace';
 
 const SimulationContext = createContext();
 
@@ -7,11 +15,18 @@ const SimulationContext = createContext();
 const STEP_MS = 1600;
 
 export const SimulationProvider = ({ children }) => {
-  const { dispatch } = useDiagram();
+  const { state, dispatch } = useDiagram();
   const [scenario, setScenario] = useState(null);
   const [stepIndex, setStepIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ladderOpen, setLadderOpen] = useState(false);
+  const [traceError, setTraceError] = useState('');
+
+  // Latest diagram + persistent per-LB algorithm state (rotation pointers etc.)
+  // for traces. Pointers persist across traces so repeated traces cycle.
+  const diagRef = useRef(state);
+  diagRef.current = state;
+  const lbStateRef = useRef({ rr: {}, wrr: {}, rnd: {} });
 
   const stepCount = scenario ? scenario.steps.length : 0;
 
@@ -64,6 +79,31 @@ export const SimulationProvider = ({ children }) => {
     setStepIndex(-1);
     setScenario(null);
     setLadderOpen(false);
+    setTraceError('');
+  }, []);
+
+  // Build and play a single-packet trace over the *current* diagram (does not
+  // replace it, unlike loadScenario). LB hops branch by their algorithm.
+  const startTrace = useCallback((sourceId, targetId, sourceKey) => {
+    const { nodes, connections } = diagRef.current;
+    const result = buildTrace(nodes, connections, sourceId, targetId, lbStateRef.current, {
+      sourceKey: sourceKey || sourceId,
+    });
+    setTraceError(result.error || '');
+    if (!result.steps || result.steps.length === 0) {
+      setScenario(null);
+      setStepIndex(-1);
+      setIsPlaying(false);
+      return;
+    }
+    setScenario({ name: 'Packet Trace', steps: result.steps, isTrace: true });
+    setStepIndex(0);
+    setIsPlaying(true);
+    setLadderOpen(false);
+  }, []);
+
+  const resetTraceState = useCallback(() => {
+    lbStateRef.current = { rr: {}, wrr: {}, rnd: {} };
   }, []);
 
   // Auto-advance while playing.
@@ -95,6 +135,9 @@ export const SimulationProvider = ({ children }) => {
     stop,
     clear,
     setLadderOpen,
+    startTrace,
+    resetTraceState,
+    traceError,
   };
 
   return <SimulationContext.Provider value={value}>{children}</SimulationContext.Provider>;

@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import Toolbar from './components/Toolbar';
 import ValidationPanel from './components/ValidationPanel';
+import TracePanel from './components/TracePanel';
 import Canvas from './components/Canvas';
 import FlowControls from './components/FlowControls';
 import SequenceDiagram from './components/SequenceDiagram';
@@ -39,6 +40,8 @@ function App() {
             <PropertiesPanel />
             <hr className="panel-divider" />
             <ValidationPanel />
+            <hr className="panel-divider" />
+            <TracePanel />
             <hr className="panel-divider" />
             <Toolbar playing={playing} onTogglePlay={() => setPlaying((p) => !p)} />
           </div>

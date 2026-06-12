@@ -149,6 +149,9 @@ const diagramReducer = (state, action) => {
         status: c.status || 'normal',
         label: c.label || '',
         sequence: c.sequence || '',
+        weight: c.weight,
+        activeConnections: c.activeConnections,
+        responseTime: c.responseTime,
         waypoints: (c.waypoints || []).map((wp) => ({ x: wp.x, y: wp.y })),
       }));
       return {

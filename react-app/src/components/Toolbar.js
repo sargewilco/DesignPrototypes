@@ -18,6 +18,9 @@ const Toolbar = ({ playing, onTogglePlay }) => {
       label: c.label,
       status: c.status,
       sequence: c.sequence,
+      weight: c.weight,
+      activeConnections: c.activeConnections,
+      responseTime: c.responseTime,
       waypoints: c.waypoints,
     })),
   });
